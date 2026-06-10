@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>liquid-glass-js · Playground</title>
+<style>
+  :root {
+    --panel-bg: rgba(18, 20, 28, 0.72);
+    --panel-border: rgba(255, 255, 255, 0.12);
+    --text: rgba(255, 255, 255, 0.92);
+    --text-dim: rgba(255, 255, 255, 0.55);
+    --accent: #8a7bff;
+    --accent2: #58c4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    color: var(--text); overflow: hidden; background: #05060a;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ====================== Background scene (cloned and refracted by the component) ====================== */
+  #bg { position: fixed; inset: 0; z-index: 0; }
+  .scene { position: absolute; inset: 0; overflow: hidden; transition: background 0.4s ease; }
+
+  .scene.grid {
+    background:
+      linear-gradient(125deg, rgba(255, 90, 180, 0.20), rgba(0,0,0,0) 40%),
+      linear-gradient(300deg, rgba(80, 200, 255, 0.20), rgba(0,0,0,0) 45%),
+      radial-gradient(circle at 75% 25%, #2a1d5e, #0a0a14 60%),
+      #0a0a14;
+  }
+  .scene.grid .grid-lines {
+    position: absolute; inset: -2px;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.10) 0 1px, transparent 1px 44px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 1px, transparent 1px 44px);
+  }
+  .scene.grid .bands {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(45deg,
+        rgba(255,120,80,0.55) 0 30px, rgba(120,90,255,0.55) 30px 60px, rgba(90,210,255,0.55) 60px 90px);
+    opacity: 0.16;
+  }
+  .scene.aurora {
+    background:
+      radial-gradient(40% 50% at 20% 30%, rgba(120, 80, 255, 0.65), transparent 70%),
+      radial-gradient(45% 55% at 80% 25%, rgba(0, 200, 255, 0.55), transparent 70%),
+      radial-gradient(50% 60% at 60% 85%, rgba(255, 70, 160, 0.55), transparent 70%),
+      radial-gradient(40% 50% at 15% 80%, rgba(60, 255, 190, 0.45), transparent 70%),
+      #06060f;
+  }
+  .scene.aurora .grid-lines, .scene.aurora .bands { display: none; }
+  .scene.photo { background: #000; }
+  .scene.photo .grid-lines, .scene.photo .bands { display: none; }
+  .scene .photo-img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: 0; transition: opacity 0.5s ease;
+  }
+  .scene.photo .photo-img { opacity: 1; }
+
+  .scene-deco {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; text-align: center;
+  }
+  .scene-deco .big {
+    font-size: clamp(40px, 8vw, 120px); font-weight: 800; letter-spacing: -0.03em; line-height: 0.95;
+    background: linear-gradient(90deg, #ff8a5b, #ff5bb0, #8a7bff, #58c4ff);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 4px 30px rgba(120,90,255,0.4));
+  }
+  .scene-deco .sub { font-size: clamp(14px, 2vw, 22px); letter-spacing: 0.35em; text-transform: uppercase; color: rgba(255,255,255,0.65); }
+  .scene-deco .emojis { font-size: clamp(28px, 5vw, 64px); letter-spacing: 14px; }
+  .scene-deco.hide { display: none; }
+
+  /* ====================== Control panel (must sit above the glass) ====================== */
+  .panel {
+    position: fixed; top: 18px; right: 18px; width: 320px; max-height: calc(100vh - 36px);
+    z-index: 1000; display: flex; flex-direction: column;
+    background: var(--panel-bg);
+    -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4);
+    border: 1px solid var(--panel-border); border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5); overflow: hidden;
+  }
+  .panel-head { padding: 16px 18px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .panel-head h1 { margin: 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .panel-head .dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, var(--accent2), var(--accent)); box-shadow: 0 0 10px var(--accent); }
+  .panel-head p { margin: 6px 0 0; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+  .panel-head code { color: var(--accent2); }
+  .panel-body { padding: 12px 18px 18px; overflow-y: auto; }
+  .panel-body::-webkit-scrollbar { width: 8px; }
+  .panel-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 4px; }
+  .section-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin: 16px 0 8px; }
+  .section-title:first-child { margin-top: 4px; }
+  .ctrl { margin-bottom: 11px; }
+  .ctrl-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .ctrl-row label { font-size: 12.5px; font-weight: 500; }
+  .ctrl-row label .en { color: var(--text-dim); font-weight: 400; font-size: 11px; margin-left: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .ctrl-row .val { font-size: 11.5px; color: var(--accent2); font-variant-numeric: tabular-nums; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.14); outline: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 2px solid var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+  input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--accent); background: #fff; cursor: pointer; }
+  .field-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .field-row label { font-size: 12px; flex: 0 0 auto; }
+  select, .btn { font-family: inherit; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); border-radius: 9px; padding: 7px 10px; cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; }
+  select { flex: 1; }
+  select:hover, .btn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.3); }
+  input[type="color"] { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; background: none; cursor: pointer; }
+  input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+  input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+  .preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .btn { text-align: center; padding: 8px 4px; }
+  .btn.full { width: 100%; margin-top: 6px; }
+  .hint { position: fixed; left: 18px; bottom: 16px; z-index: 1000; font-size: 12px; color: rgba(255,255,255,0.55); background: rgba(0,0,0,0.3); padding: 8px 14px; border-radius: 20px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); pointer-events: none; }
+  @media (max-width: 720px) { .panel { width: calc(100vw - 24px); right: 12px; top: 12px; max-height: 56vh; } .hint { display: none; } }
+</style>
+</head>
+<body>
+
+  <!-- Background scene: the component clones this to refract it -->
+  <div id="bg">
+    <div class="scene grid">
+      <div class="grid-lines"></div>
+      <div class="bands"></div>
+      <img class="photo-img" alt="" />
+    </div>
+    <div class="scene-deco">
+      <div class="big">Liquid&nbsp;Glass</div>
+      <div class="sub">refraction · displacement</div>
+      <div class="emojis">🔮 🫧 🌊 ✨ 🍋 🟣 🔵 🟠</div>
+    </div>
+  </div>
+
+  <div class="hint">↔︎ Drag the glass over the text / grid to see the refraction &amp; magnification</div>
+
+  <!-- ============ Control panel ============ -->
+  <aside class="panel">
+    <div class="panel-head">
+      <h1><span class="dot"></span> liquid-glass-js</h1>
+      <p>Created with <code>new LiquidGlass({ background })</code> · cross-browser · convex refraction (magnify) + chroma + normal-based specular.</p>
+    </div>
+    <div class="panel-body">
+      <div class="section-title">Shape</div>
+      <div id="group-shape"></div>
+      <div class="section-title">Refraction</div>
+      <div id="group-refract"></div>
+      <div class="section-title">Finish</div>
+      <div id="group-finish"></div>
+      <div class="section-title">Appearance</div>
+      <div class="field-row">
+        <label>Background</label>
+        <select id="scene-select">
+          <option value="grid">Grid (recommended)</option>
+          <option value="aurora">Aurora</option>
+          <option value="photo">Photo</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label>Tint</label>
+        <input type="color" id="tint-color" value="#ffffff" />
+        <div style="flex:1"></div>
+      </div>
+      <div id="group-tint"></div>
+      <div class="section-title">Presets</div>
+      <div class="preset-grid" id="presets"></div>
+      <button class="btn full" id="reset">↺ Reset to defaults</button>
+    </div>
+  </aside>
+
+  <script src="dist/liquid-glass.umd.min.js"></script>
+  <script>
+  "use strict";
+
+  /* Defaults = strong-refraction look with tint 0 and a light chroma (same as the component's). */
+  const DEFAULTS = {
+    width: 360, height: 220, radius: 48,
+    scale: 46, depth: 40, curvature: 2.2, convexity: 1.0, chroma: 0.1,
+    blur: 0, glow: 0.18, edge: 0.7, specAngle: 135, tint: 0,
+  };
+
+  /* label = display name, en = the API parameter key. */
+  const CONTROLS = {
+    shape: [
+      { key: 'width',  label: 'Width',  en: 'width',  min: 120, max: 560, step: 1, unit: 'px' },
+      { key: 'height', label: 'Height', en: 'height', min: 80,  max: 440, step: 1, unit: 'px' },
+      { key: 'radius', label: 'Radius', en: 'radius', min: 0,   max: 220, step: 1, unit: 'px' },
+    ],
+    refract: [
+      { key: 'scale',     label: 'Scale',     en: 'scale',     min: 0,   max: 90, step: 0.5, unit: 'px' },
+      { key: 'depth',     label: 'Bezel',     en: 'depth',     min: 2,   max: 200, step: 1,  unit: 'px' },
+      { key: 'curvature', label: 'Curvature', en: 'curvature', min: 1.2, max: 6,  step: 0.1, unit: '' },
+      { key: 'convexity', label: 'Convexity', en: 'convexity', min: -1,  max: 1,  step: 0.05, unit: '' },
+      { key: 'chroma',    label: 'Chroma',    en: 'chroma',    min: 0,   max: 0.6, step: 0.01, unit: '' },
+    ],
+    finish: [
+      { key: 'blur',      label: 'Blur',     en: 'blur',      min: 0, max: 24,  step: 0.5, unit: 'px' },
+      { key: 'glow',      label: 'Glow',     en: 'glow',      min: 0, max: 1,   step: 0.01, unit: '' },
+      { key: 'edge',      label: 'Specular', en: 'edge',      min: 0, max: 1,   step: 0.01, unit: '' },
+      { key: 'specAngle', label: 'Angle',    en: 'specAngle', min: 0, max: 360, step: 1,    unit: '°' },
+    ],
+    tint: [
+      { key: 'tint', label: 'Tint opacity', en: 'tint', min: 0, max: 0.4, step: 0.01, unit: '' },
+    ],
+  };
+
+  const PRESETS = {
+    'Default':   { },
+    'Subtle':    { scale: 12, depth: 34, curvature: 2.4, convexity: 1.0, chroma: 0.08, blur: 0, glow: 0.10, edge: 0.5, radius: 70 },
+    'Strong':    { scale: 46, depth: 40, curvature: 2.2, convexity: 1.0, chroma: 0.34, blur: 0, glow: 0.18, edge: 0.7, radius: 48 },
+    'Magnifier': { width: 300, height: 300, radius: 150, scale: 64, depth: 150, curvature: 2.0, convexity: 1.0, chroma: 0.12, blur: 0, glow: 0.08, edge: 0.35 },
+    'Frosted':   { scale: 10, depth: 34, curvature: 2.6, convexity: 1.0, chroma: 0.05, blur: 14, glow: 0.14, edge: 0.5, radius: 40, tint: 0.10 },
+    'Concave':   { scale: 34, depth: 44, curvature: 2.2, convexity: -1.0, chroma: 0.16, blur: 0, glow: 0.10, edge: 0.5, radius: 60 },
+  };
+
+  /* ====== Create the component instance ====== */
+  const bgEl = document.getElementById('bg');
+  const glass = new LiquidGlass(Object.assign({ background: bgEl, zIndex: 50 }, DEFAULTS));
+
+  const state = Object.assign({}, DEFAULTS);
+
+  /* ====== Control panel (consumes the component API: glass.set / moveTo / refresh) ====== */
+  const sliders = {};
+  function buildGroup(id, list) {
+    const host = document.getElementById(id);
+    list.forEach(cfg => {
+      const wrap = document.createElement('div');
+      wrap.className = 'ctrl';
+      wrap.innerHTML =
+        `<div class="ctrl-row"><label>${cfg.label}<span class="en">${cfg.en}</span></label>` +
+        `<span class="val" id="val-${cfg.key}"></span></div>` +
+        `<input type="range" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}">`;
+      host.appendChild(wrap);
+      const input = wrap.querySelector('input');
+      sliders[cfg.key] = { input, cfg, val: wrap.querySelector('.val') };
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        state[cfg.key] = v;
+        updateLabel(cfg.key);
+        glass.set({ [cfg.key]: v });
+      });
+    });
+  }
+  buildGroup('group-shape', CONTROLS.shape);
+  buildGroup('group-refract', CONTROLS.refract);
+  buildGroup('group-finish', CONTROLS.finish);
+  buildGroup('group-tint', CONTROLS.tint);
+
+  function updateLabel(key) {
+    const s = sliders[key]; if (!s) return;
+    const v = state[key];
+    const txt = Number.isInteger(v) ? v : parseFloat(v.toFixed(2));
+    s.val.textContent = txt + (s.cfg.unit || '');
+  }
+  function syncSliders() {
+    Object.keys(sliders).forEach(k => { sliders[k].input.value = state[k]; updateLabel(k); });
+  }
+  function centerGlass() {
+    glass.moveTo((window.innerWidth - state.width) / 2, (window.innerHeight - state.height) / 2);
+  }
+
+  /* Presets */
+  const presetHost = document.getElementById('presets');
+  Object.keys(PRESETS).forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = name;
+    b.addEventListener('click', () => {
+      Object.assign(state, DEFAULTS, PRESETS[name]);
+      syncSliders();
+      glass.set(state);
+      centerGlass();
+    });
+    presetHost.appendChild(b);
+  });
+  document.getElementById('reset').addEventListener('click', () => {
+    Object.assign(state, DEFAULTS);
+    document.getElementById('tint-color').value = '#ffffff';
+    syncSliders();
+    glass.set(Object.assign({ tintColor: '#ffffff' }, state));
+    centerGlass();
+  });
+
+  /* Tint colour */
+  document.getElementById('tint-color').addEventListener('input', (e) => {
+    glass.set({ tintColor: e.target.value });
+  });
+
+  /* Background switch: update #bg, then glass.refresh() to re-clone */
+  const sceneEl = bgEl.querySelector('.scene');
+  const decoEl = bgEl.querySelector('.scene-deco');
+  const photoEl = bgEl.querySelector('.photo-img');
+  photoEl.addEventListener('load', () => glass.refresh());
+  document.getElementById('scene-select').addEventListener('change', (e) => {
+    const v = e.target.value;
+    sceneEl.className = 'scene ' + v;
+    decoEl.classList.toggle('hide', v === 'photo');
+    if (v === 'photo' && !photoEl.src) photoEl.src = 'https://picsum.photos/seed/liquidglass/1600/1000';
+    glass.refresh();
+  });
+
+  window.addEventListener('resize', centerGlass);
+
+  /* Start */
+  syncSliders();
+  centerGlass();
+  </script>
+</body>
+</html>

@@ -1,0 +1,475 @@
+// src/liquid-glass.js
+var SVGNS = "http://www.w3.org/2000/svg";
+var XLINK = "http://www.w3.org/1999/xlink";
+var clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+function roundedRectSDF(px, py, hw, hh, r) {
+  const qx = Math.abs(px) - hw + r;
+  const qy = Math.abs(py) - hh + r;
+  return Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - r;
+}
+var DEFAULTS = {
+  width: 360,
+  height: 220,
+  radius: 48,
+  scale: 46,
+  depth: 40,
+  curvature: 2.2,
+  convexity: 1,
+  chroma: 0.1,
+  blur: 0,
+  glow: 0.18,
+  edge: 0.7,
+  specAngle: 135,
+  tint: 0,
+  tintColor: "#ffffff"
+};
+var LIVE = /* @__PURE__ */ new Set(["blur", "glow", "tint", "tintColor"]);
+var _uid = 0;
+var _styleEl = null;
+function injectStyle() {
+  if (_styleEl || typeof document === "undefined") return;
+  _styleEl = document.createElement("style");
+  _styleEl.id = "liquid-glass-style";
+  _styleEl.textContent = `.lqg-lens{position:fixed;top:0;left:0;overflow:hidden;pointer-events:none;}.lqg-lens-inner{position:absolute;top:0;left:0;}.lqg-glass{position:fixed;top:0;left:0;box-sizing:border-box;-webkit-backdrop-filter:blur(var(--lqg-blur,0px));backdrop-filter:blur(var(--lqg-blur,0px));background:color-mix(in srgb, var(--lqg-tint-color,#fff) calc(var(--lqg-tint,0) * 100%), transparent);box-shadow:0 10px 40px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.25),inset 0 1px 1px rgba(255,255,255,.25),inset 0 0 0 1px rgba(255,255,255,.06),0 0 calc(var(--lqg-glow,0) * 60px) rgba(255,255,255, calc(var(--lqg-glow,0) * .55));touch-action:none;will-change:transform;}.lqg-glass.lqg-draggable{pointer-events:auto;cursor:grab;}.lqg-glass.lqg-draggable:active{cursor:grabbing;}`;
+  (document.head || document.documentElement).appendChild(_styleEl);
+}
+var LiquidGlass = class {
+  constructor(opts = {}) {
+    injectStyle();
+    this.uid = "lqg" + ++_uid;
+    this.background = opts.background || null;
+    this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
+    this.draggable = opts.draggable !== false;
+    this.params = Object.assign({}, DEFAULTS);
+    for (const k in DEFAULTS) if (opts[k] != null) this.params[k] = opts[k];
+    this.margin = 60;
+    this.lensX = 0;
+    this.lensY = 0;
+    this.bgX = 0;
+    this.bgY = 0;
+    this._seq = 0;
+    this._dragMode = false;
+    this._raf = 0;
+    this._syncRaf = 0;
+    this.canvas = document.createElement("canvas");
+    this.ctx = this.canvas.getContext("2d", { willReadFrequently: true });
+    this.specCanvas = document.createElement("canvas");
+    this.specCtx = this.specCanvas.getContext("2d", { willReadFrequently: true });
+    this._build();
+    this._bindEvents();
+    const x = opts.x != null ? opts.x : (window.innerWidth - this.params.width) / 2;
+    const y = opts.y != null ? opts.y : (window.innerHeight - this.params.height) / 2;
+    this.lensX = x;
+    this.lensY = y;
+    this.refresh();
+  }
+  /* ---------- Build DOM and the per-instance SVG filters (unique ids) ---------- */
+  _build() {
+    const u = this.uid;
+    const cm = (ch) => {
+      const m = ["0 0 0 0 0", "0 0 0 0 0", "0 0 0 0 0", "0 0 0 1 0"];
+      m[ch] = ch === 0 ? "1 0 0 0 0" : ch === 1 ? "0 1 0 0 0" : "0 0 1 0 0";
+      return m.join("  ");
+    };
+    const svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("aria-hidden", "true");
+    svg.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
+    svg.innerHTML = `<defs><filter id="${u}-full" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feFlood flood-color="rgb(128,128,128)" result="neutral"/><feImage id="${u}-map" x="0" y="0" preserveAspectRatio="none" result="raw"/><feComposite in="raw" in2="neutral" operator="over" result="map"/><feDisplacementMap id="${u}-dr" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="dr"/><feColorMatrix in="dr" type="matrix" values="${cm(0)}" result="cr"/><feDisplacementMap id="${u}-dg" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="dg"/><feColorMatrix in="dg" type="matrix" values="${cm(1)}" result="cg"/><feDisplacementMap id="${u}-db" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="db"/><feColorMatrix in="db" type="matrix" values="${cm(2)}" result="cb"/><feBlend in="cr" in2="cg" mode="screen" result="rg"/><feBlend in="rg" in2="cb" mode="screen" result="rgb"/><feImage id="${u}-spec" x="0" y="0" preserveAspectRatio="none" result="spec"/><feBlend in="spec" in2="rgb" mode="screen"/></filter><filter id="${u}-drag" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feFlood flood-color="rgb(128,128,128)" result="neutral"/><feImage id="${u}-map-d" x="0" y="0" preserveAspectRatio="none" result="raw"/><feComposite in="raw" in2="neutral" operator="over" result="map"/><feDisplacementMap id="${u}-dd" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="rgb"/><feImage id="${u}-spec-d" x="0" y="0" preserveAspectRatio="none" result="spec"/><feBlend in="spec" in2="rgb" mode="screen"/></filter></defs>`;
+    document.body.appendChild(svg);
+    this.svg = svg;
+    const q = (id) => svg.querySelector("#" + CSS.escape(id));
+    this.filterFull = q(u + "-full");
+    this.filterDrag = q(u + "-drag");
+    this.feImage = q(u + "-map");
+    this.feImageDrag = q(u + "-map-d");
+    this.feSpec = q(u + "-spec");
+    this.feSpecDrag = q(u + "-spec-d");
+    this.dispR = q(u + "-dr");
+    this.dispG = q(u + "-dg");
+    this.dispB = q(u + "-db");
+    this.dispDrag = q(u + "-dd");
+    this.lensEl = document.createElement("div");
+    this.lensEl.className = "lqg-lens";
+    this.lensEl.style.zIndex = this.zIndex;
+    this.lensInner = document.createElement("div");
+    this.lensInner.className = "lqg-lens-inner";
+    this.lensEl.appendChild(this.lensInner);
+    this.glassEl = document.createElement("div");
+    this.glassEl.className = "lqg-glass" + (this.draggable ? " lqg-draggable" : "");
+    this.glassEl.style.zIndex = this.zIndex + 1;
+    document.body.appendChild(this.lensEl);
+    document.body.appendChild(this.glassEl);
+    this._applyVars();
+  }
+  /* ---------- Background clone + alignment ---------- */
+  _cloneBackground() {
+    this.lensInner.innerHTML = "";
+    const bg = this.background;
+    if (!bg) return;
+    const clone = bg.cloneNode(true);
+    clone.style.position = "absolute";
+    clone.style.inset = "0";
+    clone.style.margin = "0";
+    clone.setAttribute("aria-hidden", "true");
+    this.lensInner.appendChild(clone);
+  }
+  _syncBg() {
+    if (this.background) {
+      const r = this.background.getBoundingClientRect();
+      this.bgX = r.left;
+      this.bgY = r.top;
+      this.lensInner.style.width = r.width + "px";
+      this.lensInner.style.height = r.height + "px";
+    } else {
+      this.bgX = 0;
+      this.bgY = 0;
+      this.lensInner.style.width = window.innerWidth + "px";
+      this.lensInner.style.height = window.innerHeight + "px";
+    }
+  }
+  /** Re-clone the background, rebuild the maps and re-align. Call after the background changes. */
+  refresh() {
+    this._cloneBackground();
+    this._syncBg();
+    this.generateMap();
+    return this;
+  }
+  /* ---------- Displacement + specular maps (height-field optical model) ---------- */
+  generateMap() {
+    const p = this.params;
+    const W = p.width, H = p.height;
+    const M = Math.max(16, Math.ceil(p.scale * (1 + clamp(p.chroma, 0, 0.95))) + 12);
+    this.margin = M;
+    const OW = W + 2 * M, OH = H + 2 * M;
+    const hw = W / 2, hh = H / 2;
+    const rr = Math.min(p.radius, hw, hh);
+    const bezel = Math.max(1, p.depth);
+    const k = Math.max(1.2, p.curvature);
+    const blend = (clamp(p.convexity, -1, 1) + 1) / 2;
+    const profile = (t) => {
+      t = clamp(t, 0, 1);
+      const q = 1 - t;
+      const convex = Math.pow(1 - Math.pow(q, k), 1 / k);
+      return 1 - convex + (convex - (1 - convex)) * blend;
+    };
+    const dpp = 0.5 / bezel;
+    const res = Math.min(1, 360 / Math.max(OW, OH));
+    const mw = Math.max(2, Math.round(OW * res));
+    const mh = Math.max(2, Math.round(OH * res));
+    const cv = this.canvas;
+    cv.width = mw;
+    cv.height = mh;
+    const img = this.ctx.createImageData(mw, mh);
+    const data = img.data;
+    const N = mw * mh;
+    const rx = new Float32Array(N), ry = new Float32Array(N), sp = new Float32Array(N);
+    let maxAbs = 1e-6, maxSpec = 1e-6;
+    const la = p.specAngle * Math.PI / 180;
+    const Lx = Math.cos(la), Ly = -Math.sin(la);
+    const SHININESS = 4;
+    const e = Math.max(0.75, 0.75 / res);
+    const sdf = (x, y) => roundedRectSDF(x, y, hw, hh, rr);
+    let idx = 0;
+    for (let y = 0; y < mh; y++) {
+      for (let x = 0; x < mw; x++, idx++) {
+        const px = (x + 0.5) / mw * OW - OW / 2;
+        const py = (y + 0.5) / mh * OH - OH / 2;
+        const d = sdf(px, py);
+        const din = -d;
+        let mag = 0;
+        if (din >= 0 && din <= bezel) {
+          const t = din / bezel;
+          mag = (profile(t + dpp) - profile(t - dpp)) / (2 * dpp);
+        }
+        let gx = sdf(px + e, py) - sdf(px - e, py);
+        let gy = sdf(px, py + e) - sdf(px, py - e);
+        const gl = Math.hypot(gx, gy) || 1;
+        gx /= gl;
+        gy /= gl;
+        const align = gx * Lx + gy * Ly;
+        const sv = Math.abs(mag) * (Math.pow(Math.max(0, align), SHININESS) + 0.3 * Math.pow(Math.max(0, -align), SHININESS));
+        sp[idx] = sv;
+        if (sv > maxSpec) maxSpec = sv;
+        const dx = -gx * mag, dy = -gy * mag;
+        rx[idx] = dx;
+        ry[idx] = dy;
+        const m = Math.max(Math.abs(dx), Math.abs(dy));
+        if (m > maxAbs) maxAbs = m;
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      data[i * 4] = clamp(rx[i] / maxAbs * 0.5 + 0.5, 0, 1) * 255;
+      data[i * 4 + 1] = clamp(ry[i] / maxAbs * 0.5 + 0.5, 0, 1) * 255;
+      data[i * 4 + 2] = 128;
+      data[i * 4 + 3] = 255;
+    }
+    this.ctx.putImageData(img, 0, 0);
+    const url = cv.toDataURL();
+    this.specCanvas.width = mw;
+    this.specCanvas.height = mh;
+    const simg = this.specCtx.createImageData(mw, mh);
+    const sd = simg.data;
+    for (let i = 0; i < N; i++) {
+      const a = clamp(Math.pow(sp[i] / maxSpec, 0.9) * p.edge, 0, 1);
+      sd[i * 4] = 255;
+      sd[i * 4 + 1] = 255;
+      sd[i * 4 + 2] = 255;
+      sd[i * 4 + 3] = a * 255;
+    }
+    this.specCtx.putImageData(simg, 0, 0);
+    const specUrl = this.specCanvas.toDataURL();
+    this.lensEl.style.width = OW + "px";
+    this.lensEl.style.height = OH + "px";
+    this.lensEl.style.clipPath = `inset(${M}px round ${rr}px)`;
+    this._setImg([this.feImage, this.feImageDrag], OW, OH, url);
+    this._setImg([this.feSpec, this.feSpecDrag], OW, OH, specUrl);
+    this.placeLens();
+    this.updateScales();
+    this.commit();
+  }
+  _setImg(list, w, h, href) {
+    for (const fe of list) {
+      fe.setAttribute("width", w);
+      fe.setAttribute("height", h);
+      fe.setAttribute("href", href);
+      fe.setAttributeNS(XLINK, "href", href);
+    }
+  }
+  updateScales() {
+    const s = this.params.scale, c = clamp(this.params.chroma, 0, 0.95), base = 2 * s;
+    this.dispR.setAttribute("scale", (base * (1 + c)).toFixed(2));
+    this.dispG.setAttribute("scale", base.toFixed(2));
+    this.dispB.setAttribute("scale", (base * (1 - c)).toFixed(2));
+    this.dispDrag.setAttribute("scale", base.toFixed(2));
+  }
+  /* Safari caches filter output by id; bump the id after a map update to force a refresh. */
+  commit() {
+    this._seq++;
+    const el = this._dragMode ? this.filterDrag : this.filterFull;
+    const id = (this._dragMode ? this.uid + "-drag-" : this.uid + "-full-") + this._seq;
+    el.setAttribute("id", id);
+    this.lensEl.style.filter = "url(#" + id + ")";
+  }
+  setDragMode(on) {
+    this._dragMode = on;
+    this.commit();
+  }
+  /* Position the lens window and align the cloned background to the real one. Integer-snapped
+     so the clone shares the pixel grid with the original (avoids text shimmer). */
+  placeLens() {
+    const M = this.margin;
+    const lx = Math.round(this.lensX) - M, ly = Math.round(this.lensY) - M;
+    this.lensEl.style.left = lx + "px";
+    this.lensEl.style.top = ly + "px";
+    this.lensInner.style.left = this.bgX - lx + "px";
+    this.lensInner.style.top = this.bgY - ly + "px";
+    const p = this.params;
+    const g = this.glassEl.style;
+    g.width = p.width + "px";
+    g.height = p.height + "px";
+    g.borderRadius = Math.min(p.radius, p.width / 2, p.height / 2) + "px";
+    g.transform = `translate(${Math.round(this.lensX)}px, ${Math.round(this.lensY)}px)`;
+  }
+  _applyVars() {
+    const g = this.glassEl.style, p = this.params;
+    g.setProperty("--lqg-blur", p.blur + "px");
+    g.setProperty("--lqg-glow", p.glow);
+    g.setProperty("--lqg-tint", p.tint);
+    g.setProperty("--lqg-tint-color", p.tintColor);
+  }
+  /* ---------- Public API ---------- */
+  /** Update one or more parameters. Rebuilds the maps only when needed. */
+  set(partial) {
+    let regen = false;
+    for (const key in partial) {
+      if (!(key in this.params)) continue;
+      this.params[key] = partial[key];
+      if (!LIVE.has(key)) regen = true;
+    }
+    this._applyVars();
+    if (regen) {
+      cancelAnimationFrame(this._raf);
+      this._raf = requestAnimationFrame(() => this.generateMap());
+    } else {
+      this.placeLens();
+      this.updateScales();
+      this.commit();
+    }
+    return this;
+  }
+  /** Get a single parameter, or a copy of all parameters. */
+  get(key) {
+    return key ? this.params[key] : Object.assign({}, this.params);
+  }
+  /** Move the glass. x/y are the screen coordinates of its top-left corner. */
+  moveTo(x, y) {
+    this.lensX = x;
+    this.lensY = y;
+    this.placeLens();
+    return this;
+  }
+  /** Swap the background element being refracted. */
+  setBackground(el) {
+    this.background = el;
+    this.refresh();
+    return this;
+  }
+  /** Remove all DOM, filters and listeners created by this instance. */
+  destroy() {
+    cancelAnimationFrame(this._raf);
+    cancelAnimationFrame(this._syncRaf);
+    window.removeEventListener("scroll", this._onSync, true);
+    window.removeEventListener("resize", this._onSync);
+    this.glassEl.remove();
+    this.lensEl.remove();
+    this.svg.remove();
+  }
+  /* ---------- Events ---------- */
+  _bindEvents() {
+    this._onSync = () => {
+      if (this._syncRaf) return;
+      this._syncRaf = requestAnimationFrame(() => {
+        this._syncRaf = 0;
+        this._syncBg();
+        this.placeLens();
+      });
+    };
+    window.addEventListener("scroll", this._onSync, true);
+    window.addEventListener("resize", this._onSync);
+    if (!this.draggable) return;
+    let dragging = false, ox = 0, oy = 0, px = 0, py = 0, raf = 0;
+    this.glassEl.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      dragging = true;
+      ox = ev.clientX - this.lensX;
+      oy = ev.clientY - this.lensY;
+      this.glassEl.setPointerCapture(ev.pointerId);
+      this.setDragMode(true);
+    });
+    this.glassEl.addEventListener("pointermove", (ev) => {
+      if (!dragging) return;
+      px = ev.clientX - ox;
+      py = ev.clientY - oy;
+      if (!raf) raf = requestAnimationFrame(() => {
+        raf = 0;
+        this.moveTo(px, py);
+      });
+    });
+    const up = () => {
+      if (!dragging) return;
+      dragging = false;
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        this.moveTo(px, py);
+      }
+      this.setDragMode(false);
+    };
+    this.glassEl.addEventListener("pointerup", up);
+    this.glassEl.addEventListener("pointercancel", up);
+  }
+};
+LiquidGlass.DEFAULTS = DEFAULTS;
+var ATTRS = {
+  width: "width",
+  height: "height",
+  radius: "radius",
+  scale: "scale",
+  depth: "depth",
+  curvature: "curvature",
+  convexity: "convexity",
+  chroma: "chroma",
+  blur: "blur",
+  glow: "glow",
+  edge: "edge",
+  "spec-angle": "specAngle",
+  tint: "tint",
+  "tint-color": "tintColor"
+};
+var LiquidGlassElement = null;
+if (typeof HTMLElement !== "undefined") {
+  LiquidGlassElement = class extends HTMLElement {
+    static get observedAttributes() {
+      return Object.keys(ATTRS).concat(["background", "draggable", "x", "y", "z-index"]);
+    }
+    connectedCallback() {
+      if (this.glass) return;
+      this.style.display = "none";
+      const at = (n) => this.getAttribute(n);
+      const num = (n) => {
+        const v = at(n);
+        return v == null ? void 0 : parseFloat(v);
+      };
+      const opts = {
+        background: at("background") ? document.querySelector(at("background")) : null,
+        draggable: at("draggable") !== "false",
+        zIndex: at("z-index") != null ? parseInt(at("z-index"), 10) : void 0,
+        x: num("x"),
+        y: num("y"),
+        tintColor: at("tint-color") || void 0
+      };
+      for (const attr in ATTRS) if (attr !== "tint-color") opts[ATTRS[attr]] = num(attr);
+      this.glass = new LiquidGlass(opts);
+    }
+    disconnectedCallback() {
+      if (this.glass) {
+        this.glass.destroy();
+        this.glass = null;
+      }
+    }
+    attributeChangedCallback(name, _old, val) {
+      if (!this.glass) return;
+      if (name === "background") {
+        this.glass.setBackground(val ? document.querySelector(val) : null);
+        return;
+      }
+      if (name === "x" || name === "y") {
+        const x = this.getAttribute("x"), y = this.getAttribute("y");
+        this.glass.moveTo(x != null ? parseFloat(x) : this.glass.lensX, y != null ? parseFloat(y) : this.glass.lensY);
+        return;
+      }
+      if (name in ATTRS) this.glass.set({ [ATTRS[name]]: name === "tint-color" ? val : parseFloat(val) });
+    }
+  };
+  if (typeof customElements !== "undefined" && !customElements.get("liquid-glass")) {
+    customElements.define("liquid-glass", LiquidGlassElement);
+  }
+}
+var liquid_glass_default = LiquidGlass;
+export {
+  DEFAULTS,
+  LiquidGlass,
+  LiquidGlassElement,
+  liquid_glass_default as default
+};
+/*!
+ * liquid-glass-js — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
+ *
+ * Built on the SVG feDisplacementMap primitive: a displacement map is generated on the
+ * fly from a "height field" optical model, bending the real background pixels — convex
+ * surfaces magnify, concave shrink — with chromatic aberration and a normal-based
+ * specular highlight.
+ *
+ * Refraction source = clone mode: the background element you point it at is cloned and
+ * refracted, which keeps it working across Chrome, Safari and Firefox.
+ *
+ * --- Usage A: JavaScript class ---
+ *   import LiquidGlass from 'liquid-glass-js';
+ *   const glass = new LiquidGlass({
+ *     background: document.querySelector('#scene'), // element to refract (it gets cloned)
+ *     width: 360, height: 220, radius: 48,
+ *     scale: 46, chroma: 0.1, tint: 0,              // see DEFAULTS for the full list
+ *   });
+ *   glass.set({ scale: 60 }); // update params
+ *   glass.moveTo(x, y);       // move (screen position of the glass top-left)
+ *   glass.refresh();          // re-clone after the background changes
+ *   glass.destroy();          // tear down
+ *
+ * --- Usage B: Web Component ---
+ *   import 'liquid-glass-js';  // registers <liquid-glass>
+ *   <liquid-glass background="#scene" width="360" height="220"
+ *                  scale="46" chroma="0.1" tint="0"></liquid-glass>
+ *
+ * @license MIT
+ */
+//# sourceMappingURL=liquid-glass.esm.js.map

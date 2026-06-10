@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+.claude/
+
+# dist/ is committed on purpose so the GitHub Pages demo and CDN usage work.

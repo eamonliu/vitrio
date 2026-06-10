@@ -1,0 +1,69 @@
+{
+  "name": "liquid-glass-js",
+  "version": "0.1.0",
+  "description": "Cross-browser liquid-glass refraction (Chrome / Safari / Firefox). Real optical displacement with magnification, chromatic aberration and a normal-based specular highlight. Zero dependencies. JS class + <liquid-glass> web component.",
+  "type": "module",
+  "main": "dist/liquid-glass.cjs.js",
+  "module": "dist/liquid-glass.esm.js",
+  "unpkg": "dist/liquid-glass.umd.min.js",
+  "jsdelivr": "dist/liquid-glass.umd.min.js",
+  "types": "dist/liquid-glass.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/liquid-glass.d.ts",
+      "import": "./dist/liquid-glass.esm.js",
+      "require": "./dist/liquid-glass.cjs.js",
+      "default": "./dist/liquid-glass.esm.js"
+    },
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "**/umd-entry.js",
+    "**/*.umd.js",
+    "**/*.umd.min.js"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build:esm": "esbuild src/liquid-glass.js --bundle --format=esm --sourcemap --outfile=dist/liquid-glass.esm.js",
+    "build:esm:min": "esbuild src/liquid-glass.js --bundle --format=esm --minify --sourcemap --outfile=dist/liquid-glass.esm.min.js",
+    "build:cjs": "esbuild src/liquid-glass.js --bundle --format=cjs --sourcemap --outfile=dist/liquid-glass.cjs.js",
+    "build:umd": "esbuild src/umd-entry.js --bundle --format=iife --sourcemap --outfile=dist/liquid-glass.umd.js",
+    "build:umd:min": "esbuild src/umd-entry.js --bundle --format=iife --minify --sourcemap --outfile=dist/liquid-glass.umd.min.js",
+    "build:types": "node scripts/copy-types.mjs",
+    "build": "npm run clean && npm run build:esm && npm run build:esm:min && npm run build:cjs && npm run build:umd && npm run build:umd:min && npm run build:types",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "liquid-glass",
+    "glassmorphism",
+    "refraction",
+    "displacement-map",
+    "feDisplacementMap",
+    "svg-filter",
+    "frosted-glass",
+    "lens",
+    "chromatic-aberration",
+    "web-component",
+    "ui",
+    "effect"
+  ],
+  "author": "Eamon Liu (https://github.com/eamonliu)",
+  "license": "MIT",
+  "homepage": "https://github.com/eamonliu/liquid-glass-js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eamonliu/liquid-glass-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/eamonliu/liquid-glass-js/issues"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

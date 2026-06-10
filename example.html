@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>liquid-glass-js · Web Component example</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: -apple-system, system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+  #bg {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.08) 0 1px, transparent 1px 40px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.08) 0 1px, transparent 1px 40px),
+      radial-gradient(circle at 30% 30%, #3a2d7e, #0a0a14 70%), #0a0a14;
+  }
+  #bg h1 {
+    font-size: 16vw; font-weight: 800; margin: 0; letter-spacing: -0.03em;
+    background: linear-gradient(90deg, #ff8a5b, #ff5bb0, #8a7bff, #58c4ff);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .tip { position: fixed; left: 16px; bottom: 14px; color: rgba(255,255,255,.5); font-size: 13px; }
+  code { color: #9ecbff; }
+</style>
+</head>
+<body>
+  <!-- The background to refract -->
+  <div id="bg"><h1>GLASS</h1></div>
+
+  <!-- Declarative usage: one tag. "background" points at the element to refract. -->
+  <liquid-glass background="#bg" width="320" height="200" radius="44"
+                scale="46" chroma="0.1" tint="0" spec-angle="135"></liquid-glass>
+
+  <div class="tip">Drag the glass · rendered by the <code>&lt;liquid-glass&gt;</code> web component</div>
+
+  <script src="dist/liquid-glass.umd.min.js"></script>
+</body>
+</html>
