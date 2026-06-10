@@ -31,17 +31,63 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const XLINK = 'http://www.w3.org/1999/xlink';
-const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const clamp = (v: number, a: number, b: number): number => Math.min(Math.max(v, a), b);
 
 /* Signed distance field of a rounded rectangle: negative inside, 0 on the edge, positive outside. */
-function roundedRectSDF(px, py, hw, hh, r) {
+function roundedRectSDF(px: number, py: number, hw: number, hh: number, r: number): number {
   const qx = Math.abs(px) - hw + r;
   const qy = Math.abs(py) - hh + r;
   return Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - r;
 }
 
+/** All tunable glass parameters. */
+export interface LiquidGlassParams {
+  /** Glass width in CSS px. */
+  width: number;
+  /** Glass height in CSS px. */
+  height: number;
+  /** Corner radius in CSS px. */
+  radius: number;
+  /** Refraction strength (max edge displacement in px). */
+  scale: number;
+  /** Bezel width: how far the curved surface reaches inward from the edge, in px. */
+  depth: number;
+  /** Surface profile exponent: ~2 spherical, ~4 squircle (Apple-like). */
+  curvature: number;
+  /** Lens shape: +1 convex (magnify), 0 flat, -1 concave (shrink). */
+  convexity: number;
+  /** Chromatic aberration amount. */
+  chroma: number;
+  /** Frost / backdrop blur in px (0 = clear). */
+  blur: number;
+  /** Outer/inner glow strength (0..1). */
+  glow: number;
+  /** Specular highlight strength (0..1). */
+  edge: number;
+  /** Specular light angle in degrees. */
+  specAngle: number;
+  /** Tint opacity (0..1). */
+  tint: number;
+  /** Tint colour (any CSS colour). */
+  tintColor: string;
+}
+
+/** Constructor options: every parameter, plus placement/behaviour. */
+export interface LiquidGlassOptions extends Partial<LiquidGlassParams> {
+  /** Element to refract. It is cloned (clone mode), so the effect works cross-browser. */
+  background?: Element | null;
+  /** z-index of the lens layer; the draggable glass sits at z + 1. Default 100. */
+  zIndex?: number;
+  /** Whether the glass can be dragged with a pointer. Default true. */
+  draggable?: boolean;
+  /** Initial screen X of the glass top-left. Defaults to centered. */
+  x?: number;
+  /** Initial screen Y of the glass top-left. Defaults to centered. */
+  y?: number;
+}
+
 /** Default parameters (based on a "strong refraction" look, with tint 0 and a light chroma). */
-export const DEFAULTS = {
+export const DEFAULTS: LiquidGlassParams = {
   width: 360, height: 220, radius: 48,
   scale: 46, depth: 40, curvature: 2.2, convexity: 1.0, chroma: 0.1,
   blur: 0, glow: 0.18, edge: 0.7, specAngle: 135,
@@ -49,13 +95,15 @@ export const DEFAULTS = {
 };
 
 /* Params that only touch CSS variables (no map rebuild). Everything else rebuilds the maps. */
-const LIVE = new Set(['blur', 'glow', 'tint', 'tintColor']);
+const LIVE: ReadonlySet<keyof LiquidGlassParams> = new Set<keyof LiquidGlassParams>([
+  'blur', 'glow', 'tint', 'tintColor',
+]);
 
 let _uid = 0;
-let _styleEl = null;
+let _styleEl: HTMLStyleElement | null = null;
 
 /* Inject the shared component stylesheet once. */
-function injectStyle() {
+function injectStyle(): void {
   if (_styleEl || typeof document === 'undefined') return;
   _styleEl = document.createElement('style');
   _styleEl.id = 'liquid-glass-style';
@@ -74,30 +122,69 @@ function injectStyle() {
   (document.head || document.documentElement).appendChild(_styleEl);
 }
 
-/**
- * LiquidGlass — programmatic API.
- * @param {object} [opts] DEFAULTS + { background, zIndex, draggable, x, y }
- */
+/** LiquidGlass — programmatic API. */
 export class LiquidGlass {
-  constructor(opts = {}) {
+  /** Built-in default parameters. */
+  static DEFAULTS: LiquidGlassParams = DEFAULTS;
+
+  /** Current parameters (mutate via `set()`). */
+  readonly params: LiquidGlassParams;
+  /** Screen X of the glass top-left. */
+  lensX = 0;
+  /** Screen Y of the glass top-left. */
+  lensY = 0;
+  /** The element being refracted (cloned). */
+  background: Element | null;
+
+  private uid: string;
+  private zIndex: number;
+  private draggable: boolean;
+  private margin = 60;
+  private bgX = 0;
+  private bgY = 0;
+  private _seq = 0;
+  private _dragMode = false;
+  private _raf = 0;
+  private _syncRaf = 0;
+
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private specCanvas: HTMLCanvasElement;
+  private specCtx: CanvasRenderingContext2D;
+
+  private svg!: SVGSVGElement;
+  private filterFull!: SVGFilterElement;
+  private filterDrag!: SVGFilterElement;
+  private feImage!: SVGFEImageElement;
+  private feImageDrag!: SVGFEImageElement;
+  private feSpec!: SVGFEImageElement;
+  private feSpecDrag!: SVGFEImageElement;
+  private dispR!: SVGFEDisplacementMapElement;
+  private dispG!: SVGFEDisplacementMapElement;
+  private dispB!: SVGFEDisplacementMapElement;
+  private dispDrag!: SVGFEDisplacementMapElement;
+  private lensEl!: HTMLDivElement;
+  private lensInner!: HTMLDivElement;
+  private glassEl!: HTMLDivElement;
+  private _onSync!: () => void;
+
+  constructor(opts: LiquidGlassOptions = {}) {
     injectStyle();
     this.uid = 'lqg' + (++_uid);
     this.background = opts.background || null;
     this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
     this.draggable = opts.draggable !== false;
 
-    this.params = Object.assign({}, DEFAULTS);
-    for (const k in DEFAULTS) if (opts[k] != null) this.params[k] = opts[k];
-
-    this.margin = 60;
-    this.lensX = 0; this.lensY = 0;
-    this.bgX = 0; this.bgY = 0;
-    this._seq = 0; this._dragMode = false; this._raf = 0; this._syncRaf = 0;
+    this.params = { ...DEFAULTS };
+    for (const k of Object.keys(DEFAULTS) as (keyof LiquidGlassParams)[]) {
+      const v = opts[k];
+      if (v != null) (this.params as Record<keyof LiquidGlassParams, number | string>)[k] = v;
+    }
 
     this.canvas = document.createElement('canvas');
-    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
     this.specCanvas = document.createElement('canvas');
-    this.specCtx = this.specCanvas.getContext('2d', { willReadFrequently: true });
+    this.specCtx = this.specCanvas.getContext('2d', { willReadFrequently: true })!;
 
     this._build();
     this._bindEvents();
@@ -109,9 +196,9 @@ export class LiquidGlass {
   }
 
   /* ---------- Build DOM and the per-instance SVG filters (unique ids) ---------- */
-  _build() {
+  private _build(): void {
     const u = this.uid;
-    const cm = (ch) => { // feColorMatrix that keeps a single colour channel
+    const cm = (ch: number): string => { // feColorMatrix that keeps a single colour channel
       const m = ['0 0 0 0 0', '0 0 0 0 0', '0 0 0 0 0', '0 0 0 1 0'];
       m[ch] = ch === 0 ? '1 0 0 0 0' : ch === 1 ? '0 1 0 0 0' : '0 0 1 0 0';
       return m.join('  ');
@@ -147,28 +234,28 @@ export class LiquidGlass {
       `</defs>`;
     document.body.appendChild(svg);
     this.svg = svg;
-    const q = (id) => svg.querySelector('#' + CSS.escape(id));
-    this.filterFull = q(u + '-full');
-    this.filterDrag = q(u + '-drag');
-    this.feImage = q(u + '-map');
-    this.feImageDrag = q(u + '-map-d');
-    this.feSpec = q(u + '-spec');
-    this.feSpecDrag = q(u + '-spec-d');
-    this.dispR = q(u + '-dr');
-    this.dispG = q(u + '-dg');
-    this.dispB = q(u + '-db');
-    this.dispDrag = q(u + '-dd');
+    const q = <T extends Element>(id: string): T => svg.querySelector('#' + CSS.escape(id)) as T;
+    this.filterFull = q<SVGFilterElement>(u + '-full');
+    this.filterDrag = q<SVGFilterElement>(u + '-drag');
+    this.feImage = q<SVGFEImageElement>(u + '-map');
+    this.feImageDrag = q<SVGFEImageElement>(u + '-map-d');
+    this.feSpec = q<SVGFEImageElement>(u + '-spec');
+    this.feSpecDrag = q<SVGFEImageElement>(u + '-spec-d');
+    this.dispR = q<SVGFEDisplacementMapElement>(u + '-dr');
+    this.dispG = q<SVGFEDisplacementMapElement>(u + '-dg');
+    this.dispB = q<SVGFEDisplacementMapElement>(u + '-db');
+    this.dispDrag = q<SVGFEDisplacementMapElement>(u + '-dd');
 
     this.lensEl = document.createElement('div');
     this.lensEl.className = 'lqg-lens';
-    this.lensEl.style.zIndex = this.zIndex;
+    this.lensEl.style.zIndex = String(this.zIndex);
     this.lensInner = document.createElement('div');
     this.lensInner.className = 'lqg-lens-inner';
     this.lensEl.appendChild(this.lensInner);
 
     this.glassEl = document.createElement('div');
     this.glassEl.className = 'lqg-glass' + (this.draggable ? ' lqg-draggable' : '');
-    this.glassEl.style.zIndex = this.zIndex + 1;
+    this.glassEl.style.zIndex = String(this.zIndex + 1);
 
     document.body.appendChild(this.lensEl);
     document.body.appendChild(this.glassEl);
@@ -176,14 +263,14 @@ export class LiquidGlass {
   }
 
   /* ---------- Background clone + alignment ---------- */
-  _cloneBackground() {
+  private _cloneBackground(): void {
     this.lensInner.innerHTML = '';
     const bg = this.background;
     if (!bg) return;
     // Keep ids: the background's styling may rely on id selectors (e.g. #bg / #bg h1).
     // The clone is an aria-hidden static snapshot; duplicate ids only affect CSS matching,
     // not the page's own getElementById/querySelector (the original comes first in the DOM).
-    const clone = bg.cloneNode(true);
+    const clone = bg.cloneNode(true) as HTMLElement;
     clone.style.position = 'absolute';
     clone.style.inset = '0';
     clone.style.margin = '0';
@@ -191,7 +278,7 @@ export class LiquidGlass {
     this.lensInner.appendChild(clone);
   }
 
-  _syncBg() {
+  private _syncBg(): void {
     if (this.background) {
       const r = this.background.getBoundingClientRect();
       this.bgX = r.left; this.bgY = r.top;
@@ -205,7 +292,7 @@ export class LiquidGlass {
   }
 
   /** Re-clone the background, rebuild the maps and re-align. Call after the background changes. */
-  refresh() {
+  refresh(): this {
     this._cloneBackground();
     this._syncBg();
     this.generateMap(); // also calls placeLens + commit
@@ -213,7 +300,7 @@ export class LiquidGlass {
   }
 
   /* ---------- Displacement + specular maps (height-field optical model) ---------- */
-  generateMap() {
+  private generateMap(): void {
     const p = this.params;
     const W = p.width, H = p.height;
     const M = Math.max(16, Math.ceil(p.scale * (1 + clamp(p.chroma, 0, 0.95))) + 12);
@@ -227,7 +314,7 @@ export class LiquidGlass {
     const bezel = Math.max(1, p.depth);
     const k = Math.max(1.2, p.curvature);
     const blend = (clamp(p.convexity, -1, 1) + 1) / 2;
-    const profile = (t) => {
+    const profile = (t: number): number => {
       t = clamp(t, 0, 1);
       const q = 1 - t;
       const convex = Math.pow(1 - Math.pow(q, k), 1 / k);
@@ -248,7 +335,7 @@ export class LiquidGlass {
     const Lx = Math.cos(la), Ly = -Math.sin(la);
     const SHININESS = 4;
     const e = Math.max(0.75, 0.75 / res);
-    const sdf = (x, y) => roundedRectSDF(x, y, hw, hh, rr);
+    const sdf = (x: number, y: number): number => roundedRectSDF(x, y, hw, hh, rr);
 
     let idx = 0;
     for (let y = 0; y < mh; y++) {
@@ -309,16 +396,16 @@ export class LiquidGlass {
     this.commit();
   }
 
-  _setImg(list, w, h, href) {
+  private _setImg(list: SVGFEImageElement[], w: number, h: number, href: string): void {
     for (const fe of list) {
-      fe.setAttribute('width', w);
-      fe.setAttribute('height', h);
+      fe.setAttribute('width', String(w));
+      fe.setAttribute('height', String(h));
       fe.setAttribute('href', href);
       fe.setAttributeNS(XLINK, 'href', href);
     }
   }
 
-  updateScales() {
+  private updateScales(): void {
     const s = this.params.scale, c = clamp(this.params.chroma, 0, 0.95), base = 2 * s;
     this.dispR.setAttribute('scale', (base * (1 + c)).toFixed(2));
     this.dispG.setAttribute('scale', base.toFixed(2));
@@ -327,7 +414,7 @@ export class LiquidGlass {
   }
 
   /* Safari caches filter output by id; bump the id after a map update to force a refresh. */
-  commit() {
+  private commit(): void {
     this._seq++;
     const el = this._dragMode ? this.filterDrag : this.filterFull;
     const id = (this._dragMode ? this.uid + '-drag-' : this.uid + '-full-') + this._seq;
@@ -335,11 +422,11 @@ export class LiquidGlass {
     this.lensEl.style.filter = 'url(#' + id + ')';
   }
 
-  setDragMode(on) { this._dragMode = on; this.commit(); }
+  private setDragMode(on: boolean): void { this._dragMode = on; this.commit(); }
 
   /* Position the lens window and align the cloned background to the real one. Integer-snapped
      so the clone shares the pixel grid with the original (avoids text shimmer). */
-  placeLens() {
+  private placeLens(): void {
     const M = this.margin;
     const lx = Math.round(this.lensX) - M, ly = Math.round(this.lensY) - M;
     this.lensEl.style.left = lx + 'px';
@@ -354,22 +441,24 @@ export class LiquidGlass {
     g.transform = `translate(${Math.round(this.lensX)}px, ${Math.round(this.lensY)}px)`;
   }
 
-  _applyVars() {
+  private _applyVars(): void {
     const g = this.glassEl.style, p = this.params;
     g.setProperty('--lqg-blur', p.blur + 'px');
-    g.setProperty('--lqg-glow', p.glow);
-    g.setProperty('--lqg-tint', p.tint);
+    g.setProperty('--lqg-glow', String(p.glow));
+    g.setProperty('--lqg-tint', String(p.tint));
     g.setProperty('--lqg-tint-color', p.tintColor);
   }
 
   /* ---------- Public API ---------- */
 
   /** Update one or more parameters. Rebuilds the maps only when needed. */
-  set(partial) {
+  set(partial: Partial<LiquidGlassParams>): this {
     let regen = false;
-    for (const key in partial) {
+    for (const key of Object.keys(partial) as (keyof LiquidGlassParams)[]) {
       if (!(key in this.params)) continue;
-      this.params[key] = partial[key];
+      const v = partial[key];
+      if (v === undefined) continue;
+      (this.params as Record<keyof LiquidGlassParams, number | string>)[key] = v;
       if (!LIVE.has(key)) regen = true;
     }
     this._applyVars();
@@ -378,17 +467,22 @@ export class LiquidGlass {
     return this;
   }
 
-  /** Get a single parameter, or a copy of all parameters. */
-  get(key) { return key ? this.params[key] : Object.assign({}, this.params); }
+  /** Get a copy of all parameters. */
+  get(): LiquidGlassParams;
+  /** Get a single parameter. */
+  get<K extends keyof LiquidGlassParams>(key: K): LiquidGlassParams[K];
+  get(key?: keyof LiquidGlassParams): LiquidGlassParams | LiquidGlassParams[keyof LiquidGlassParams] {
+    return key ? this.params[key] : { ...this.params };
+  }
 
   /** Move the glass. x/y are the screen coordinates of its top-left corner. */
-  moveTo(x, y) { this.lensX = x; this.lensY = y; this.placeLens(); return this; }
+  moveTo(x: number, y: number): this { this.lensX = x; this.lensY = y; this.placeLens(); return this; }
 
   /** Swap the background element being refracted. */
-  setBackground(el) { this.background = el; this.refresh(); return this; }
+  setBackground(el: Element | null): this { this.background = el; this.refresh(); return this; }
 
   /** Remove all DOM, filters and listeners created by this instance. */
-  destroy() {
+  destroy(): void {
     cancelAnimationFrame(this._raf); cancelAnimationFrame(this._syncRaf);
     window.removeEventListener('scroll', this._onSync, true);
     window.removeEventListener('resize', this._onSync);
@@ -396,7 +490,7 @@ export class LiquidGlass {
   }
 
   /* ---------- Events ---------- */
-  _bindEvents() {
+  private _bindEvents(): void {
     this._onSync = () => {
       if (this._syncRaf) return;
       this._syncRaf = requestAnimationFrame(() => { this._syncRaf = 0; this._syncBg(); this.placeLens(); });
@@ -406,18 +500,18 @@ export class LiquidGlass {
 
     if (!this.draggable) return;
     let dragging = false, ox = 0, oy = 0, px = 0, py = 0, raf = 0;
-    this.glassEl.addEventListener('pointerdown', (ev) => {
+    this.glassEl.addEventListener('pointerdown', (ev: PointerEvent) => {
       ev.preventDefault();
       dragging = true; ox = ev.clientX - this.lensX; oy = ev.clientY - this.lensY;
       this.glassEl.setPointerCapture(ev.pointerId);
       this.setDragMode(true); // single-pass (no chroma) while dragging — lighter
     });
-    this.glassEl.addEventListener('pointermove', (ev) => {
+    this.glassEl.addEventListener('pointermove', (ev: PointerEvent) => {
       if (!dragging) return;
       px = ev.clientX - ox; py = ev.clientY - oy;
       if (!raf) raf = requestAnimationFrame(() => { raf = 0; this.moveTo(px, py); });
     });
-    const up = () => {
+    const up = (): void => {
       if (!dragging) return;
       dragging = false;
       if (raf) { cancelAnimationFrame(raf); raf = 0; this.moveTo(px, py); }
@@ -428,43 +522,56 @@ export class LiquidGlass {
   }
 }
 
-LiquidGlass.DEFAULTS = DEFAULTS;
-
 /* ============================================================
    Web Component: <liquid-glass> — a thin declarative wrapper.
    Defined only in a DOM environment (SSR-safe).
 ============================================================ */
-const ATTRS = {
+const ATTRS: Record<string, keyof LiquidGlassParams> = {
   width: 'width', height: 'height', radius: 'radius', scale: 'scale',
   depth: 'depth', curvature: 'curvature', convexity: 'convexity', chroma: 'chroma',
   blur: 'blur', glow: 'glow', edge: 'edge', 'spec-angle': 'specAngle',
   tint: 'tint', 'tint-color': 'tintColor',
 };
 
-export let LiquidGlassElement = null;
+/** Instance shape of the <liquid-glass> custom element. */
+export interface LiquidGlassHTMLElement extends HTMLElement {
+  /** The underlying LiquidGlass instance (null until connected). */
+  glass: LiquidGlass | null;
+}
+
+/** The <liquid-glass> custom element constructor (null in non-DOM environments). */
+export let LiquidGlassElement: (new () => LiquidGlassHTMLElement) | null = null;
 
 if (typeof HTMLElement !== 'undefined') {
-  LiquidGlassElement = class extends HTMLElement {
-    static get observedAttributes() {
+  class LiquidGlassElementImpl extends HTMLElement implements LiquidGlassHTMLElement {
+    glass: LiquidGlass | null = null;
+
+    static get observedAttributes(): string[] {
       return Object.keys(ATTRS).concat(['background', 'draggable', 'x', 'y', 'z-index']);
     }
-    connectedCallback() {
+    connectedCallback(): void {
       if (this.glass) return;
       this.style.display = 'none';
-      const at = (n) => this.getAttribute(n);
-      const num = (n) => { const v = at(n); return v == null ? undefined : parseFloat(v); };
-      const opts = {
-        background: at('background') ? document.querySelector(at('background')) : null,
+      const at = (n: string): string | null => this.getAttribute(n);
+      const num = (n: string): number | undefined => { const v = at(n); return v == null ? undefined : parseFloat(v); };
+      const bgSel = at('background');
+      const zIdx = at('z-index');
+      const opts: LiquidGlassOptions = {
+        background: bgSel ? document.querySelector(bgSel) : null,
         draggable: at('draggable') !== 'false',
-        zIndex: at('z-index') != null ? parseInt(at('z-index'), 10) : undefined,
+        zIndex: zIdx != null ? parseInt(zIdx, 10) : undefined,
         x: num('x'), y: num('y'),
         tintColor: at('tint-color') || undefined,
       };
-      for (const attr in ATTRS) if (attr !== 'tint-color') opts[ATTRS[attr]] = num(attr);
+      for (const attr of Object.keys(ATTRS)) {
+        if (attr === 'tint-color') continue;
+        const v = num(attr);
+        if (v !== undefined) (opts as Record<string, unknown>)[ATTRS[attr]] = v;
+      }
       this.glass = new LiquidGlass(opts);
     }
-    disconnectedCallback() { if (this.glass) { this.glass.destroy(); this.glass = null; } }
-    attributeChangedCallback(name, _old, val) {
+    disconnectedCallback(): void { if (this.glass) { this.glass.destroy(); this.glass = null; } }
+    attributeChangedCallback(name: string, _old: string | null, val: string | null): void {
       if (!this.glass) return;
       if (name === 'background') { this.glass.setBackground(val ? document.querySelector(val) : null); return; }
       if (name === 'x' || name === 'y') {
@@ -472,12 +579,24 @@ if (typeof HTMLElement !== 'undefined') {
         this.glass.moveTo(x != null ? parseFloat(x) : this.glass.lensX, y != null ? parseFloat(y) : this.glass.lensY);
         return;
       }
-      if (name in ATTRS) this.glass.set({ [ATTRS[name]]: name === 'tint-color' ? val : parseFloat(val) });
+      if (val == null || !(name in ATTRS)) return;
+      this.glass.set({ [ATTRS[name]]: name === 'tint-color' ? val : parseFloat(val) } as Partial<LiquidGlassParams>);
     }
-  };
+  }
+  LiquidGlassElement = LiquidGlassElementImpl;
   if (typeof customElements !== 'undefined' && !customElements.get('liquid-glass')) {
-    customElements.define('liquid-glass', LiquidGlassElement);
+    customElements.define('liquid-glass', LiquidGlassElementImpl);
   }
 }
 
 export default LiquidGlass;
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'liquid-glass': LiquidGlassHTMLElement;
+  }
+  interface Window {
+    LiquidGlass: typeof LiquidGlass;
+    LiquidGlassElement: (new () => LiquidGlassHTMLElement) | null;
+  }
+}

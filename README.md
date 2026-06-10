@@ -9,7 +9,7 @@ Cross-browser **liquid-glass refraction** for the web — real optical displacem
 - 🔬 **Real refraction** via SVG `feDisplacementMap` driven by a height-field optical model — convex surfaces magnify, concave shrink.
 - 🌈 Chromatic aberration + specular highlight computed from the surface normal.
 - 🧭 **Works in Chrome, Safari and Firefox.** Most demos out there are Chromium-only (they reference an SVG filter from `backdrop-filter`); this one refracts a clone of the background instead, so it runs everywhere.
-- 🪶 ~13 kB min, **zero dependencies**, ESM / CJS / UMD + TypeScript types.
+- 🪶 ~13 kB min, **zero dependencies**, written in **TypeScript** — ships ESM / CJS / UMD + type declarations generated from source.
 - 🖱️ Draggable, fully runtime-configurable.
 
 > **Live demo:** open `index.html` (full playground) or `example.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/liquid-glass-js/).
@@ -143,9 +143,12 @@ useEffect(() => {
 
 ## Build from source
 
+The library is written in TypeScript (`src/*.ts`); esbuild produces the bundles and `tsc` emits the type declarations.
+
 ```bash
 npm install
-npm run build   # -> dist/ (esm, cjs, umd, minified, sourcemaps, d.ts)
+npm run build       # typecheck + dist/ (esm, cjs, umd, minified, sourcemaps, d.ts)
+npm run typecheck   # tsc --noEmit only
 ```
 
 ## License

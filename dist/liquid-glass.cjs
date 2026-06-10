@@ -1,3 +1,4 @@
+"use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -16,7 +17,7 @@ var __copyProps = (to, from, except, desc) => {
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// src/liquid-glass.js
+// src/liquid-glass.ts
 var liquid_glass_exports = {};
 __export(liquid_glass_exports, {
   DEFAULTS: () => DEFAULTS,
@@ -49,7 +50,12 @@ var DEFAULTS = {
   tint: 0,
   tintColor: "#ffffff"
 };
-var LIVE = /* @__PURE__ */ new Set(["blur", "glow", "tint", "tintColor"]);
+var LIVE = /* @__PURE__ */ new Set([
+  "blur",
+  "glow",
+  "tint",
+  "tintColor"
+]);
 var _uid = 0;
 var _styleEl = null;
 function injectStyle() {
@@ -61,22 +67,27 @@ function injectStyle() {
 }
 var LiquidGlass = class {
   constructor(opts = {}) {
-    injectStyle();
-    this.uid = "lqg" + ++_uid;
-    this.background = opts.background || null;
-    this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
-    this.draggable = opts.draggable !== false;
-    this.params = Object.assign({}, DEFAULTS);
-    for (const k in DEFAULTS) if (opts[k] != null) this.params[k] = opts[k];
-    this.margin = 60;
+    /** Screen X of the glass top-left. */
     this.lensX = 0;
+    /** Screen Y of the glass top-left. */
     this.lensY = 0;
+    this.margin = 60;
     this.bgX = 0;
     this.bgY = 0;
     this._seq = 0;
     this._dragMode = false;
     this._raf = 0;
     this._syncRaf = 0;
+    injectStyle();
+    this.uid = "lqg" + ++_uid;
+    this.background = opts.background || null;
+    this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
+    this.draggable = opts.draggable !== false;
+    this.params = { ...DEFAULTS };
+    for (const k of Object.keys(DEFAULTS)) {
+      const v = opts[k];
+      if (v != null) this.params[k] = v;
+    }
     this.canvas = document.createElement("canvas");
     this.ctx = this.canvas.getContext("2d", { willReadFrequently: true });
     this.specCanvas = document.createElement("canvas");
@@ -88,6 +99,10 @@ var LiquidGlass = class {
     this.lensX = x;
     this.lensY = y;
     this.refresh();
+  }
+  static {
+    /** Built-in default parameters. */
+    this.DEFAULTS = DEFAULTS;
   }
   /* ---------- Build DOM and the per-instance SVG filters (unique ids) ---------- */
   _build() {
@@ -116,13 +131,13 @@ var LiquidGlass = class {
     this.dispDrag = q(u + "-dd");
     this.lensEl = document.createElement("div");
     this.lensEl.className = "lqg-lens";
-    this.lensEl.style.zIndex = this.zIndex;
+    this.lensEl.style.zIndex = String(this.zIndex);
     this.lensInner = document.createElement("div");
     this.lensInner.className = "lqg-lens-inner";
     this.lensEl.appendChild(this.lensInner);
     this.glassEl = document.createElement("div");
     this.glassEl.className = "lqg-glass" + (this.draggable ? " lqg-draggable" : "");
-    this.glassEl.style.zIndex = this.zIndex + 1;
+    this.glassEl.style.zIndex = String(this.zIndex + 1);
     document.body.appendChild(this.lensEl);
     document.body.appendChild(this.glassEl);
     this._applyVars();
@@ -255,8 +270,8 @@ var LiquidGlass = class {
   }
   _setImg(list, w, h, href) {
     for (const fe of list) {
-      fe.setAttribute("width", w);
-      fe.setAttribute("height", h);
+      fe.setAttribute("width", String(w));
+      fe.setAttribute("height", String(h));
       fe.setAttribute("href", href);
       fe.setAttributeNS(XLINK, "href", href);
     }
@@ -299,17 +314,19 @@ var LiquidGlass = class {
   _applyVars() {
     const g = this.glassEl.style, p = this.params;
     g.setProperty("--lqg-blur", p.blur + "px");
-    g.setProperty("--lqg-glow", p.glow);
-    g.setProperty("--lqg-tint", p.tint);
+    g.setProperty("--lqg-glow", String(p.glow));
+    g.setProperty("--lqg-tint", String(p.tint));
     g.setProperty("--lqg-tint-color", p.tintColor);
   }
   /* ---------- Public API ---------- */
   /** Update one or more parameters. Rebuilds the maps only when needed. */
   set(partial) {
     let regen = false;
-    for (const key in partial) {
+    for (const key of Object.keys(partial)) {
       if (!(key in this.params)) continue;
-      this.params[key] = partial[key];
+      const v = partial[key];
+      if (v === void 0) continue;
+      this.params[key] = v;
       if (!LIVE.has(key)) regen = true;
     }
     this._applyVars();
@@ -323,9 +340,8 @@ var LiquidGlass = class {
     }
     return this;
   }
-  /** Get a single parameter, or a copy of all parameters. */
   get(key) {
-    return key ? this.params[key] : Object.assign({}, this.params);
+    return key ? this.params[key] : { ...this.params };
   }
   /** Move the glass. x/y are the screen coordinates of its top-left corner. */
   moveTo(x, y) {
@@ -395,7 +411,6 @@ var LiquidGlass = class {
     this.glassEl.addEventListener("pointercancel", up);
   }
 };
-LiquidGlass.DEFAULTS = DEFAULTS;
 var ATTRS = {
   width: "width",
   height: "height",
@@ -414,7 +429,11 @@ var ATTRS = {
 };
 var LiquidGlassElement = null;
 if (typeof HTMLElement !== "undefined") {
-  LiquidGlassElement = class extends HTMLElement {
+  class LiquidGlassElementImpl extends HTMLElement {
+    constructor() {
+      super(...arguments);
+      this.glass = null;
+    }
     static get observedAttributes() {
       return Object.keys(ATTRS).concat(["background", "draggable", "x", "y", "z-index"]);
     }
@@ -426,15 +445,21 @@ if (typeof HTMLElement !== "undefined") {
         const v = at(n);
         return v == null ? void 0 : parseFloat(v);
       };
+      const bgSel = at("background");
+      const zIdx = at("z-index");
       const opts = {
-        background: at("background") ? document.querySelector(at("background")) : null,
+        background: bgSel ? document.querySelector(bgSel) : null,
         draggable: at("draggable") !== "false",
-        zIndex: at("z-index") != null ? parseInt(at("z-index"), 10) : void 0,
+        zIndex: zIdx != null ? parseInt(zIdx, 10) : void 0,
         x: num("x"),
         y: num("y"),
         tintColor: at("tint-color") || void 0
       };
-      for (const attr in ATTRS) if (attr !== "tint-color") opts[ATTRS[attr]] = num(attr);
+      for (const attr of Object.keys(ATTRS)) {
+        if (attr === "tint-color") continue;
+        const v = num(attr);
+        if (v !== void 0) opts[ATTRS[attr]] = v;
+      }
       this.glass = new LiquidGlass(opts);
     }
     disconnectedCallback() {
@@ -454,11 +479,13 @@ if (typeof HTMLElement !== "undefined") {
         this.glass.moveTo(x != null ? parseFloat(x) : this.glass.lensX, y != null ? parseFloat(y) : this.glass.lensY);
         return;
       }
-      if (name in ATTRS) this.glass.set({ [ATTRS[name]]: name === "tint-color" ? val : parseFloat(val) });
+      if (val == null || !(name in ATTRS)) return;
+      this.glass.set({ [ATTRS[name]]: name === "tint-color" ? val : parseFloat(val) });
     }
-  };
+  }
+  LiquidGlassElement = LiquidGlassElementImpl;
   if (typeof customElements !== "undefined" && !customElements.get("liquid-glass")) {
-    customElements.define("liquid-glass", LiquidGlassElement);
+    customElements.define("liquid-glass", LiquidGlassElementImpl);
   }
 }
 var liquid_glass_default = LiquidGlass;
@@ -492,4 +519,4 @@ var liquid_glass_default = LiquidGlass;
  *
  * @license MIT
  */
-//# sourceMappingURL=liquid-glass.cjs.js.map
+//# sourceMappingURL=liquid-glass.cjs.map
