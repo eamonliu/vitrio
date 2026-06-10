@@ -1,3 +1,33 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/vue.ts
+var vue_exports = {};
+__export(vue_exports, {
+  DEFAULTS: () => DEFAULTS,
+  LiquidGlass: () => LiquidGlass2,
+  LiquidGlassCore: () => vitrio_default,
+  default: () => vue_default
+});
+module.exports = __toCommonJS(vue_exports);
+var import_vue = require("vue");
+
 // src/vitrio.ts
 var SVGNS = "http://www.w3.org/2000/svg";
 var XLINK = "http://www.w3.org/1999/xlink";
@@ -468,12 +498,103 @@ if (typeof HTMLElement !== "undefined") {
   }
 }
 var vitrio_default = LiquidGlass;
-export {
-  DEFAULTS,
-  LiquidGlass,
-  LiquidGlassElement,
-  vitrio_default as default
-};
+
+// src/vue.ts
+var PARAM_KEYS = Object.keys(DEFAULTS);
+var resolveBackground = (bg) => typeof bg === "string" ? document.querySelector(bg) : bg ?? null;
+var LiquidGlass2 = (0, import_vue.defineComponent)({
+  name: "LiquidGlass",
+  props: {
+    /** Element to refract: an Element or a CSS selector. */
+    background: { type: [Object, String], default: null },
+    /** Whether the glass can be dragged. Create-time only. */
+    draggable: { type: Boolean, default: true },
+    /** z-index of the lens layer (glass sits at z + 1). Create-time only. */
+    zIndex: { type: Number, default: void 0 },
+    /** Screen X/Y of the glass top-left. Reactive. Default centered. */
+    x: { type: Number, default: void 0 },
+    y: { type: Number, default: void 0 },
+    width: { type: Number, default: void 0 },
+    height: { type: Number, default: void 0 },
+    radius: { type: Number, default: void 0 },
+    scale: { type: Number, default: void 0 },
+    depth: { type: Number, default: void 0 },
+    curvature: { type: Number, default: void 0 },
+    convexity: { type: Number, default: void 0 },
+    chroma: { type: Number, default: void 0 },
+    blur: { type: Number, default: void 0 },
+    glow: { type: Number, default: void 0 },
+    edge: { type: Number, default: void 0 },
+    specAngle: { type: Number, default: void 0 },
+    tint: { type: Number, default: void 0 },
+    tintColor: { type: String, default: void 0 }
+  },
+  emits: ["ready"],
+  setup(props, { emit, expose }) {
+    const glass = (0, import_vue.shallowRef)(null);
+    const pickParams = () => {
+      const out = {};
+      for (const k of PARAM_KEYS) {
+        const v = props[k];
+        if (v !== void 0) out[k] = v;
+      }
+      return out;
+    };
+    (0, import_vue.onMounted)(() => {
+      const g = new vitrio_default({
+        ...pickParams(),
+        background: resolveBackground(props.background),
+        draggable: props.draggable,
+        zIndex: props.zIndex,
+        x: props.x,
+        y: props.y
+      });
+      glass.value = g;
+      emit("ready", g);
+    });
+    (0, import_vue.onBeforeUnmount)(() => {
+      glass.value?.destroy();
+      glass.value = null;
+    });
+    (0, import_vue.watch)(
+      () => PARAM_KEYS.map((k) => props[k]),
+      () => {
+        const g = glass.value;
+        if (!g) return;
+        const partial = {};
+        let dirty = false;
+        for (const k of PARAM_KEYS) {
+          const v = props[k];
+          if (v !== void 0 && v !== g.params[k]) {
+            partial[k] = v;
+            dirty = true;
+          }
+        }
+        if (dirty) g.set(partial);
+      }
+    );
+    (0, import_vue.watch)(
+      () => props.background,
+      (bg) => {
+        const g = glass.value;
+        if (!g) return;
+        const el = resolveBackground(bg);
+        if (el !== g.background) g.setBackground(el);
+      }
+    );
+    (0, import_vue.watch)(
+      [() => props.x, () => props.y],
+      ([x, y]) => {
+        const g = glass.value;
+        if (!g || x == null || y == null) return;
+        if (x !== g.lensX || y !== g.lensY) g.moveTo(x, y);
+      }
+    );
+    expose({ glass });
+    return () => null;
+  }
+});
+var vue_default = LiquidGlass2;
 /*!
  * vitrio — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
  *
@@ -504,4 +625,24 @@ export {
  *
  * @license MIT
  */
-//# sourceMappingURL=vitrio.esm.js.map
+/*!
+ * vitrio/vue — Vue 3 wrapper for the LiquidGlass effect.
+ *
+ * <LiquidGlass /> renders no DOM of its own: it creates a LiquidGlass core instance
+ * (a fixed-position overlay appended to <body>) and keeps it in sync with the props.
+ * Vue is a peer dependency and is not bundled.
+ *
+ *   <script setup>
+ *   import { LiquidGlass } from 'vitrio/vue';
+ *   <\/script>
+ *
+ *   <template>
+ *     <div id="scene">...</div>
+ *     <LiquidGlass background="#scene" :width="360" :height="220" :scale="46" :chroma="0.1" />
+ *   </template>
+ *
+ * The core instance is exposed as `glass` on the template ref and emitted via @ready.
+ *
+ * @license MIT
+ */
+//# sourceMappingURL=vue.cjs.map

@@ -11,6 +11,7 @@ Cross-browser **liquid-glass refraction** for the web — real optical displacem
 - 🧭 **Works in Chrome, Safari and Firefox.** Most demos out there are Chromium-only (they reference an SVG filter from `backdrop-filter`); this one refracts a clone of the background instead, so it runs everywhere.
 - 🪶 ~13 kB min, **zero dependencies**, written in **TypeScript** — ships ESM / CJS / UMD + type declarations generated from source.
 - 🖱️ Draggable, fully runtime-configurable.
+- ⚛️ First-class **React** and **Vue 3** wrappers: `vitrio/react`, `vitrio/vue`.
 
 > **Live demo:** open `index.html` (full playground) or `example.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/vitrio/).
 
@@ -120,13 +121,50 @@ Every parameter is an attribute (camelCase → kebab-case, e.g. `spec-angle`, `t
 
 ## Framework usage
 
-Because it's a standard custom element, `<liquid-glass>` works in Vue, Svelte and Angular out of the box. In React (< 19) set attributes as strings, or just use the class in an effect:
+First-class wrappers ship as subpath exports: `vitrio/react` and `vitrio/vue`. Both render no DOM of their own — they drive the fixed-position glass overlay from props, and every parameter is reactive. React/Vue are optional peer dependencies (not bundled).
+
+### React — `vitrio/react`
 
 ```jsx
-useEffect(() => {
-  const g = new LiquidGlass({ background: ref.current, scale: 46 });
-  return () => g.destroy();
-}, []);
+import { useRef } from 'react';
+import { LiquidGlass } from 'vitrio/react';
+
+function App() {
+  const bgRef = useRef(null);
+  return (
+    <>
+      <div ref={bgRef} className="scene">…</div>
+      <LiquidGlass background={bgRef} width={360} height={220} scale={46} chroma={0.1} />
+    </>
+  );
+}
+```
+
+`background` accepts an element, a CSS selector or a React ref. Extra props: `draggable` / `zIndex` (create-time only), `x` / `y` (reactive position), `glassRef` (a ref or callback that receives the core instance) and `onReady`.
+
+### Vue 3 — `vitrio/vue`
+
+```vue
+<script setup>
+import { LiquidGlass } from 'vitrio/vue';
+</script>
+
+<template>
+  <div id="scene">…</div>
+  <LiquidGlass background="#scene" :width="360" :height="220" :scale="46" :chroma="0.1" @ready="g => {}" />
+</template>
+```
+
+Props mirror the parameters (kebab-case works in templates, e.g. `:spec-angle`); `background` accepts an element or a CSS selector. The core instance is emitted via `@ready` and exposed as `glass` on the template ref.
+
+### Other frameworks
+
+Because it's a standard custom element, `<liquid-glass>` works in Svelte and Angular out of the box — or use the core class in any lifecycle hook:
+
+```js
+const g = new LiquidGlass({ background: el, scale: 46 });
+// ...later
+g.destroy();
 ```
 
 ---

@@ -1,3 +1,6 @@
+// src/react.ts
+import { useEffect, useRef } from "react";
+
 // src/vitrio.ts
 var SVGNS = "http://www.w3.org/2000/svg";
 var XLINK = "http://www.w3.org/1999/xlink";
@@ -468,11 +471,86 @@ if (typeof HTMLElement !== "undefined") {
   }
 }
 var vitrio_default = LiquidGlass;
+
+// src/react.ts
+var PARAM_KEYS = Object.keys(DEFAULTS);
+function resolveBackground(bg) {
+  if (!bg) return null;
+  if (typeof bg === "string") return document.querySelector(bg);
+  if (bg instanceof Element) return bg;
+  return bg.current;
+}
+function pickParams(props) {
+  const out = {};
+  for (const k of PARAM_KEYS) {
+    const v = props[k];
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+function assignGlassRef(ref, value) {
+  if (!ref) return;
+  if (typeof ref === "function") ref(value);
+  else ref.current = value;
+}
+function LiquidGlass2(props) {
+  const glassRef = useRef(null);
+  const propsRef = useRef(props);
+  propsRef.current = props;
+  useEffect(() => {
+    const p = propsRef.current;
+    const glass = new vitrio_default({
+      ...pickParams(p),
+      background: resolveBackground(p.background),
+      draggable: p.draggable,
+      zIndex: p.zIndex,
+      x: p.x,
+      y: p.y
+    });
+    glassRef.current = glass;
+    assignGlassRef(p.glassRef, glass);
+    p.onReady?.(glass);
+    return () => {
+      glass.destroy();
+      glassRef.current = null;
+      assignGlassRef(propsRef.current.glassRef, null);
+    };
+  }, []);
+  useEffect(() => {
+    const glass = glassRef.current;
+    if (!glass) return;
+    const partial = {};
+    let dirty = false;
+    for (const k of PARAM_KEYS) {
+      const v = props[k];
+      if (v !== void 0 && v !== glass.params[k]) {
+        partial[k] = v;
+        dirty = true;
+      }
+    }
+    if (dirty) glass.set(partial);
+  }, PARAM_KEYS.map((k) => props[k]));
+  const bg = props.background;
+  useEffect(() => {
+    const glass = glassRef.current;
+    if (!glass) return;
+    const el = resolveBackground(bg);
+    if (el !== glass.background) glass.setBackground(el);
+  }, [bg]);
+  const { x, y } = props;
+  useEffect(() => {
+    const glass = glassRef.current;
+    if (!glass || x == null || y == null) return;
+    if (x !== glass.lensX || y !== glass.lensY) glass.moveTo(x, y);
+  }, [x, y]);
+  return null;
+}
+var react_default = LiquidGlass2;
 export {
   DEFAULTS,
-  LiquidGlass,
-  LiquidGlassElement,
-  vitrio_default as default
+  LiquidGlass2 as LiquidGlass,
+  vitrio_default as LiquidGlassCore,
+  react_default as default
 };
 /*!
  * vitrio — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
@@ -504,4 +582,26 @@ export {
  *
  * @license MIT
  */
-//# sourceMappingURL=vitrio.esm.js.map
+/*!
+ * vitrio/react — React wrapper for the LiquidGlass effect.
+ *
+ * <LiquidGlass /> renders no DOM of its own: it creates a LiquidGlass core instance
+ * (a fixed-position overlay appended to <body>) and keeps it in sync with the props.
+ * React is a peer dependency and is not bundled.
+ *
+ *   import { useRef } from 'react';
+ *   import { LiquidGlass } from 'vitrio/react';
+ *
+ *   function App() {
+ *     const bgRef = useRef(null);
+ *     return (
+ *       <>
+ *         <div ref={bgRef} className="scene">...</div>
+ *         <LiquidGlass background={bgRef} width={360} height={220} scale={46} chroma={0.1} />
+ *       </>
+ *     );
+ *   }
+ *
+ * @license MIT
+ */
+//# sourceMappingURL=react.esm.js.map

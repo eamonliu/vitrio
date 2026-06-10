@@ -100,11 +100,16 @@ const LIVE: ReadonlySet<keyof LiquidGlassParams> = new Set<keyof LiquidGlassPara
 ]);
 
 let _uid = 0;
+/* Random per-module namespace: keeps SVG filter ids unique even if two copies of the
+   library coexist on one page (e.g. the core plus a framework wrapper that bundles it). */
+const _ns = 'lqg' + Math.random().toString(36).slice(2, 6) + '-';
 let _styleEl: HTMLStyleElement | null = null;
 
-/* Inject the shared component stylesheet once. */
+/* Inject the shared component stylesheet once (reuse the tag if another copy made it). */
 function injectStyle(): void {
   if (_styleEl || typeof document === 'undefined') return;
+  const existing = document.getElementById('liquid-glass-style');
+  if (existing instanceof HTMLStyleElement) { _styleEl = existing; return; }
   _styleEl = document.createElement('style');
   _styleEl.id = 'liquid-glass-style';
   _styleEl.textContent =
@@ -170,7 +175,7 @@ export class LiquidGlass {
 
   constructor(opts: LiquidGlassOptions = {}) {
     injectStyle();
-    this.uid = 'lqg' + (++_uid);
+    this.uid = _ns + (++_uid);
     this.background = opts.background || null;
     this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
     this.draggable = opts.draggable !== false;

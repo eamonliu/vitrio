@@ -1,3 +1,33 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/react.ts
+var react_exports = {};
+__export(react_exports, {
+  DEFAULTS: () => DEFAULTS,
+  LiquidGlass: () => LiquidGlass2,
+  LiquidGlassCore: () => vitrio_default,
+  default: () => react_default
+});
+module.exports = __toCommonJS(react_exports);
+var import_react = require("react");
+
 // src/vitrio.ts
 var SVGNS = "http://www.w3.org/2000/svg";
 var XLINK = "http://www.w3.org/1999/xlink";
@@ -468,12 +498,81 @@ if (typeof HTMLElement !== "undefined") {
   }
 }
 var vitrio_default = LiquidGlass;
-export {
-  DEFAULTS,
-  LiquidGlass,
-  LiquidGlassElement,
-  vitrio_default as default
-};
+
+// src/react.ts
+var PARAM_KEYS = Object.keys(DEFAULTS);
+function resolveBackground(bg) {
+  if (!bg) return null;
+  if (typeof bg === "string") return document.querySelector(bg);
+  if (bg instanceof Element) return bg;
+  return bg.current;
+}
+function pickParams(props) {
+  const out = {};
+  for (const k of PARAM_KEYS) {
+    const v = props[k];
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+function assignGlassRef(ref, value) {
+  if (!ref) return;
+  if (typeof ref === "function") ref(value);
+  else ref.current = value;
+}
+function LiquidGlass2(props) {
+  const glassRef = (0, import_react.useRef)(null);
+  const propsRef = (0, import_react.useRef)(props);
+  propsRef.current = props;
+  (0, import_react.useEffect)(() => {
+    const p = propsRef.current;
+    const glass = new vitrio_default({
+      ...pickParams(p),
+      background: resolveBackground(p.background),
+      draggable: p.draggable,
+      zIndex: p.zIndex,
+      x: p.x,
+      y: p.y
+    });
+    glassRef.current = glass;
+    assignGlassRef(p.glassRef, glass);
+    p.onReady?.(glass);
+    return () => {
+      glass.destroy();
+      glassRef.current = null;
+      assignGlassRef(propsRef.current.glassRef, null);
+    };
+  }, []);
+  (0, import_react.useEffect)(() => {
+    const glass = glassRef.current;
+    if (!glass) return;
+    const partial = {};
+    let dirty = false;
+    for (const k of PARAM_KEYS) {
+      const v = props[k];
+      if (v !== void 0 && v !== glass.params[k]) {
+        partial[k] = v;
+        dirty = true;
+      }
+    }
+    if (dirty) glass.set(partial);
+  }, PARAM_KEYS.map((k) => props[k]));
+  const bg = props.background;
+  (0, import_react.useEffect)(() => {
+    const glass = glassRef.current;
+    if (!glass) return;
+    const el = resolveBackground(bg);
+    if (el !== glass.background) glass.setBackground(el);
+  }, [bg]);
+  const { x, y } = props;
+  (0, import_react.useEffect)(() => {
+    const glass = glassRef.current;
+    if (!glass || x == null || y == null) return;
+    if (x !== glass.lensX || y !== glass.lensY) glass.moveTo(x, y);
+  }, [x, y]);
+  return null;
+}
+var react_default = LiquidGlass2;
 /*!
  * vitrio — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
  *
@@ -504,4 +603,26 @@ export {
  *
  * @license MIT
  */
-//# sourceMappingURL=vitrio.esm.js.map
+/*!
+ * vitrio/react — React wrapper for the LiquidGlass effect.
+ *
+ * <LiquidGlass /> renders no DOM of its own: it creates a LiquidGlass core instance
+ * (a fixed-position overlay appended to <body>) and keeps it in sync with the props.
+ * React is a peer dependency and is not bundled.
+ *
+ *   import { useRef } from 'react';
+ *   import { LiquidGlass } from 'vitrio/react';
+ *
+ *   function App() {
+ *     const bgRef = useRef(null);
+ *     return (
+ *       <>
+ *         <div ref={bgRef} className="scene">...</div>
+ *         <LiquidGlass background={bgRef} width={360} height={220} scale={46} chroma={0.1} />
+ *       </>
+ *     );
+ *   }
+ *
+ * @license MIT
+ */
+//# sourceMappingURL=react.cjs.map

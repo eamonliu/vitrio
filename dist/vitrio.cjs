@@ -57,9 +57,15 @@ var LIVE = /* @__PURE__ */ new Set([
   "tintColor"
 ]);
 var _uid = 0;
+var _ns = "lqg" + Math.random().toString(36).slice(2, 6) + "-";
 var _styleEl = null;
 function injectStyle() {
   if (_styleEl || typeof document === "undefined") return;
+  const existing = document.getElementById("liquid-glass-style");
+  if (existing instanceof HTMLStyleElement) {
+    _styleEl = existing;
+    return;
+  }
   _styleEl = document.createElement("style");
   _styleEl.id = "liquid-glass-style";
   _styleEl.textContent = `.lqg-lens{position:fixed;top:0;left:0;overflow:hidden;pointer-events:none;}.lqg-lens-inner{position:absolute;top:0;left:0;}.lqg-glass{position:fixed;top:0;left:0;box-sizing:border-box;-webkit-backdrop-filter:blur(var(--lqg-blur,0px));backdrop-filter:blur(var(--lqg-blur,0px));background:color-mix(in srgb, var(--lqg-tint-color,#fff) calc(var(--lqg-tint,0) * 100%), transparent);box-shadow:0 10px 40px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.25),inset 0 1px 1px rgba(255,255,255,.25),inset 0 0 0 1px rgba(255,255,255,.06),0 0 calc(var(--lqg-glow,0) * 60px) rgba(255,255,255, calc(var(--lqg-glow,0) * .55));touch-action:none;will-change:transform;}.lqg-glass.lqg-draggable{pointer-events:auto;cursor:grab;}.lqg-glass.lqg-draggable:active{cursor:grabbing;}`;
@@ -79,7 +85,7 @@ var LiquidGlass = class {
     this._raf = 0;
     this._syncRaf = 0;
     injectStyle();
-    this.uid = "lqg" + ++_uid;
+    this.uid = _ns + ++_uid;
     this.background = opts.background || null;
     this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
     this.draggable = opts.draggable !== false;

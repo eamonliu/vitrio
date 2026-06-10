@@ -8,5 +8,5 @@
     "outDir": "dist"
   },
   "include": [],
-  "files": ["src/vitrio.ts"]
+  "files": ["src/vitrio.ts", "src/react.ts", "src/vue.ts"]
 }
