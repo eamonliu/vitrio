@@ -1,5 +1,5 @@
 /*!
- * liquid-glass-js — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
+ * vitrio — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
  *
  * Built on the SVG feDisplacementMap primitive: a displacement map is generated on the
  * fly from a "height field" optical model, bending the real background pixels — convex
@@ -10,7 +10,7 @@
  * refracted, which keeps it working across Chrome, Safari and Firefox.
  *
  * --- Usage A: JavaScript class ---
- *   import LiquidGlass from 'liquid-glass-js';
+ *   import LiquidGlass from 'vitrio';
  *   const glass = new LiquidGlass({
  *     background: document.querySelector('#scene'), // element to refract (it gets cloned)
  *     width: 360, height: 220, radius: 48,
@@ -22,7 +22,7 @@
  *   glass.destroy();          // tear down
  *
  * --- Usage B: Web Component ---
- *   import 'liquid-glass-js';  // registers <liquid-glass>
+ *   import 'vitrio';  // registers <liquid-glass>
  *   <liquid-glass background="#scene" width="360" height="220"
  *                  scale="46" chroma="0.1" tint="0"></liquid-glass>
  *

@@ -17,15 +17,15 @@ var __copyProps = (to, from, except, desc) => {
 };
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// src/liquid-glass.ts
-var liquid_glass_exports = {};
-__export(liquid_glass_exports, {
+// src/vitrio.ts
+var vitrio_exports = {};
+__export(vitrio_exports, {
   DEFAULTS: () => DEFAULTS,
   LiquidGlass: () => LiquidGlass,
   LiquidGlassElement: () => LiquidGlassElement,
-  default: () => liquid_glass_default
+  default: () => vitrio_default
 });
-module.exports = __toCommonJS(liquid_glass_exports);
+module.exports = __toCommonJS(vitrio_exports);
 var SVGNS = "http://www.w3.org/2000/svg";
 var XLINK = "http://www.w3.org/1999/xlink";
 var clamp = (v, a, b) => Math.min(Math.max(v, a), b);
@@ -488,9 +488,9 @@ if (typeof HTMLElement !== "undefined") {
     customElements.define("liquid-glass", LiquidGlassElementImpl);
   }
 }
-var liquid_glass_default = LiquidGlass;
+var vitrio_default = LiquidGlass;
 /*!
- * liquid-glass-js — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
+ * vitrio — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
  *
  * Built on the SVG feDisplacementMap primitive: a displacement map is generated on the
  * fly from a "height field" optical model, bending the real background pixels — convex
@@ -501,7 +501,7 @@ var liquid_glass_default = LiquidGlass;
  * refracted, which keeps it working across Chrome, Safari and Firefox.
  *
  * --- Usage A: JavaScript class ---
- *   import LiquidGlass from 'liquid-glass-js';
+ *   import LiquidGlass from 'vitrio';
  *   const glass = new LiquidGlass({
  *     background: document.querySelector('#scene'), // element to refract (it gets cloned)
  *     width: 360, height: 220, radius: 48,
@@ -513,10 +513,10 @@ var liquid_glass_default = LiquidGlass;
  *   glass.destroy();          // tear down
  *
  * --- Usage B: Web Component ---
- *   import 'liquid-glass-js';  // registers <liquid-glass>
+ *   import 'vitrio';  // registers <liquid-glass>
  *   <liquid-glass background="#scene" width="360" height="220"
  *                  scale="46" chroma="0.1" tint="0"></liquid-glass>
  *
  * @license MIT
  */
-//# sourceMappingURL=liquid-glass.cjs.map
+//# sourceMappingURL=vitrio.cjs.map

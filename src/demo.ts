@@ -1,7 +1,7 @@
 /* Playground (index.html) — consumes the library through its public API only.
-   Loaded after dist/liquid-glass.umd.min.js, so it uses the window.LiquidGlass global
+   Loaded after dist/vitrio.umd.min.js, so it uses the window.LiquidGlass global
    (type-only import below; nothing from the library is bundled into the demo). */
-import type { LiquidGlassParams } from './liquid-glass.js';
+import type { LiquidGlassParams } from './vitrio.js';
 
 const LiquidGlass = window.LiquidGlass;
 

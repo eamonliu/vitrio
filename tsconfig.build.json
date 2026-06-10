@@ -8,5 +8,5 @@
     "outDir": "dist"
   },
   "include": [],
-  "files": ["src/liquid-glass.ts"]
+  "files": ["src/vitrio.ts"]
 }

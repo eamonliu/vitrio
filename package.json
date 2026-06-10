@@ -1,19 +1,19 @@
 {
-  "name": "liquid-glass-js",
+  "name": "vitrio",
   "version": "0.1.0",
   "description": "Cross-browser liquid-glass refraction (Chrome / Safari / Firefox). Real optical displacement with magnification, chromatic aberration and a normal-based specular highlight. Zero dependencies. JS class + <liquid-glass> web component.",
   "type": "module",
-  "main": "dist/liquid-glass.cjs",
-  "module": "dist/liquid-glass.esm.js",
-  "unpkg": "dist/liquid-glass.umd.min.js",
-  "jsdelivr": "dist/liquid-glass.umd.min.js",
-  "types": "dist/liquid-glass.d.ts",
+  "main": "dist/vitrio.cjs",
+  "module": "dist/vitrio.esm.js",
+  "unpkg": "dist/vitrio.umd.min.js",
+  "jsdelivr": "dist/vitrio.umd.min.js",
+  "types": "dist/vitrio.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/liquid-glass.d.ts",
-      "import": "./dist/liquid-glass.esm.js",
-      "require": "./dist/liquid-glass.cjs",
-      "default": "./dist/liquid-glass.esm.js"
+      "types": "./dist/vitrio.d.ts",
+      "import": "./dist/vitrio.esm.js",
+      "require": "./dist/vitrio.cjs",
+      "default": "./dist/vitrio.esm.js"
     },
     "./dist/*": "./dist/*"
   },
@@ -33,11 +33,11 @@
   "scripts": {
     "clean": "rm -rf dist",
     "typecheck": "tsc -p tsconfig.json",
-    "build:esm": "esbuild src/liquid-glass.ts --bundle --format=esm --sourcemap --outfile=dist/liquid-glass.esm.js",
-    "build:esm:min": "esbuild src/liquid-glass.ts --bundle --format=esm --minify --sourcemap --outfile=dist/liquid-glass.esm.min.js",
-    "build:cjs": "esbuild src/liquid-glass.ts --bundle --format=cjs --sourcemap --outfile=dist/liquid-glass.cjs",
-    "build:umd": "esbuild src/umd-entry.ts --bundle --format=iife --sourcemap --outfile=dist/liquid-glass.umd.js",
-    "build:umd:min": "esbuild src/umd-entry.ts --bundle --format=iife --minify --sourcemap --outfile=dist/liquid-glass.umd.min.js",
+    "build:esm": "esbuild src/vitrio.ts --bundle --format=esm --sourcemap --outfile=dist/vitrio.esm.js",
+    "build:esm:min": "esbuild src/vitrio.ts --bundle --format=esm --minify --sourcemap --outfile=dist/vitrio.esm.min.js",
+    "build:cjs": "esbuild src/vitrio.ts --bundle --format=cjs --sourcemap --outfile=dist/vitrio.cjs",
+    "build:umd": "esbuild src/umd-entry.ts --bundle --format=iife --sourcemap --outfile=dist/vitrio.umd.js",
+    "build:umd:min": "esbuild src/umd-entry.ts --bundle --format=iife --minify --sourcemap --outfile=dist/vitrio.umd.min.js",
     "build:demo": "esbuild src/demo.ts --bundle --format=iife --minify --outfile=dist/demo.min.js",
     "build:types": "tsc -p tsconfig.build.json",
     "build": "npm run clean && npm run typecheck && npm run build:esm && npm run build:esm:min && npm run build:cjs && npm run build:umd && npm run build:umd:min && npm run build:demo && npm run build:types",
@@ -59,13 +59,13 @@
   ],
   "author": "Eamon Liu (https://github.com/eamonliu)",
   "license": "MIT",
-  "homepage": "https://github.com/eamonliu/liquid-glass-js#readme",
+  "homepage": "https://github.com/eamonliu/vitrio#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eamonliu/liquid-glass-js.git"
+    "url": "git+https://github.com/eamonliu/vitrio.git"
   },
   "bugs": {
-    "url": "https://github.com/eamonliu/liquid-glass-js/issues"
+    "url": "https://github.com/eamonliu/vitrio/issues"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

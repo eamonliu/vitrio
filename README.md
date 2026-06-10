@@ -1,10 +1,10 @@
-# liquid-glass-js
+# vitrio
 
 Cross-browser **liquid-glass refraction** for the web — real optical displacement (not a blur fake), with **convex magnification**, **chromatic aberration** and a **normal-based specular highlight**. Zero dependencies. Ships as a JavaScript class **and** a `<liquid-glass>` web component.
 
-[![npm](https://img.shields.io/npm/v/liquid-glass-js.svg)](https://www.npmjs.com/package/liquid-glass-js)
-[![license](https://img.shields.io/npm/l/liquid-glass-js.svg)](./LICENSE)
-[![size](https://img.shields.io/bundlephobia/minzip/liquid-glass-js)](https://bundlephobia.com/package/liquid-glass-js)
+[![npm](https://img.shields.io/npm/v/vitrio.svg)](https://www.npmjs.com/package/vitrio)
+[![license](https://img.shields.io/npm/l/vitrio.svg)](./LICENSE)
+[![size](https://img.shields.io/bundlephobia/minzip/vitrio)](https://bundlephobia.com/package/vitrio)
 
 - 🔬 **Real refraction** via SVG `feDisplacementMap` driven by a height-field optical model — convex surfaces magnify, concave shrink.
 - 🌈 Chromatic aberration + specular highlight computed from the surface normal.
@@ -12,20 +12,20 @@ Cross-browser **liquid-glass refraction** for the web — real optical displacem
 - 🪶 ~13 kB min, **zero dependencies**, written in **TypeScript** — ships ESM / CJS / UMD + type declarations generated from source.
 - 🖱️ Draggable, fully runtime-configurable.
 
-> **Live demo:** open `index.html` (full playground) or `example.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/liquid-glass-js/).
+> **Live demo:** open `index.html` (full playground) or `example.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/vitrio/).
 
 ---
 
 ## Install
 
 ```bash
-npm install liquid-glass-js
+npm install vitrio
 ```
 
 Or via CDN (no build step):
 
 ```html
-<script src="https://unpkg.com/liquid-glass-js"></script>
+<script src="https://unpkg.com/vitrio"></script>
 ```
 
 ## Quick start
@@ -33,7 +33,7 @@ Or via CDN (no build step):
 ### A. JavaScript class
 
 ```js
-import LiquidGlass from 'liquid-glass-js';
+import LiquidGlass from 'vitrio';
 
 const glass = new LiquidGlass({
   background: document.querySelector('#scene'), // element to refract (it gets cloned)
@@ -55,7 +55,7 @@ glass.destroy();           // tear down
 <liquid-glass background="#scene" width="360" height="220"
               scale="46" chroma="0.1" tint="0"></liquid-glass>
 
-<script src="https://unpkg.com/liquid-glass-js"></script>
+<script src="https://unpkg.com/vitrio"></script>
 ```
 
 Importing the module (or the UMD script) registers the `<liquid-glass>` element automatically.

@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // src/liquid-glass.ts
+  // src/vitrio.ts
   var SVGNS = "http://www.w3.org/2000/svg";
   var XLINK = "http://www.w3.org/1999/xlink";
   var clamp = (v, a, b) => Math.min(Math.max(v, a), b);
@@ -463,17 +463,17 @@
       customElements.define("liquid-glass", LiquidGlassElementImpl);
     }
   }
-  var liquid_glass_default = LiquidGlass;
+  var vitrio_default = LiquidGlass;
 
   // src/umd-entry.ts
   if (typeof window !== "undefined") {
-    window.LiquidGlass = liquid_glass_default;
+    window.LiquidGlass = vitrio_default;
     window.LiquidGlassElement = LiquidGlassElement;
-    liquid_glass_default.DEFAULTS = DEFAULTS;
+    vitrio_default.DEFAULTS = DEFAULTS;
   }
 })();
 /*!
- * liquid-glass-js — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
+ * vitrio — Cross-browser liquid-glass refraction (Chrome / Safari / Firefox)
  *
  * Built on the SVG feDisplacementMap primitive: a displacement map is generated on the
  * fly from a "height field" optical model, bending the real background pixels — convex
@@ -484,7 +484,7 @@
  * refracted, which keeps it working across Chrome, Safari and Firefox.
  *
  * --- Usage A: JavaScript class ---
- *   import LiquidGlass from 'liquid-glass-js';
+ *   import LiquidGlass from 'vitrio';
  *   const glass = new LiquidGlass({
  *     background: document.querySelector('#scene'), // element to refract (it gets cloned)
  *     width: 360, height: 220, radius: 48,
@@ -496,10 +496,10 @@
  *   glass.destroy();          // tear down
  *
  * --- Usage B: Web Component ---
- *   import 'liquid-glass-js';  // registers <liquid-glass>
+ *   import 'vitrio';  // registers <liquid-glass>
  *   <liquid-glass background="#scene" width="360" height="220"
  *                  scale="46" chroma="0.1" tint="0"></liquid-glass>
  *
  * @license MIT
  */
-//# sourceMappingURL=liquid-glass.umd.js.map
+//# sourceMappingURL=vitrio.umd.js.map
