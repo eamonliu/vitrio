@@ -1,6 +1,6 @@
 {
   "name": "vitrio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cross-browser liquid-glass refraction (Chrome / Safari / Firefox). Real optical displacement with magnification, chromatic aberration and a normal-based specular highlight. Zero dependencies. JS class + <liquid-glass> web component.",
   "type": "module",
   "main": "dist/vitrio.cjs",
