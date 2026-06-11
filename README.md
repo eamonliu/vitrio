@@ -13,7 +13,7 @@ Cross-browser **liquid-glass refraction** for the web — real optical displacem
 - 🖱️ Draggable, fully runtime-configurable.
 - ⚛️ First-class **React** and **Vue 3** wrappers: `vitrio/react`, `vitrio/vue`.
 
-> **Live demo:** open `index.html` (full playground), `examples/ui-components.html` (glass applied to real UI — button, toggle, slider, media player) or `examples/web-component.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/vitrio/).
+> **Live demo:** open `index.html` (full playground), `examples/ui-components.html` (glass applied to real UI — button, toggle, slider, media player), `examples/video-player.html` (a glass control panel floating over a playing video) or `examples/web-component.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/vitrio/).
 
 ---
 
@@ -194,7 +194,7 @@ g.destroy();
 - **Motion performance**: filter engines re-rasterize the chain on every frame the filtered content moves. Blink keeps up at 60 fps; Gecko doesn't, so by default (`liteMotion: 'auto'`) Firefox **pauses refraction during continuous motion** — the same compositor transform stands in — and restores the filter ~120 ms after the glass rests. `liteMotion: false` keeps the filter on always; `true` forces the behaviour on Blink too. WebKit ignores the option (its rendering is already compositor-only).
 - **Opening the examples from disk**: Safari's local-file restrictions block a `file://` page from loading sibling scripts, so the example pages appear without any glass when double-clicked. Serve the repo instead: `python3 -m http.server` → `http://localhost:8000/examples/…` (Chrome and Firefox are fine with `file://`).
 - **Clone mode** refracts a *clone* of the background, so the background must be clonable DOM/CSS (a known element). It is not a drop-in over arbitrary live app UI — for that you'd want a `backdrop-filter` mode (Chromium-only), which is not included here by design.
-- The clone is a **static snapshot**. If the background animates or changes, call `refresh()`.
+- The clone is a **static snapshot**. If the background animates or changes, call `refresh()`. Exception: a cloned `<video>` is itself a live player — keep it in sync with the original (mirror play state + clock onto `.lqg-lens video`) and the glass refracts moving footage; see `examples/video-player.html`.
 - The clone keeps element **ids** so id-based styles survive; this means ids are briefly duplicated in the DOM (the clone is `aria-hidden`; your own `getElementById`/`querySelector` still return the original).
 - No cross-origin canvas reads are performed (the maps are procedural), so cross-origin images in the background are fine.
 

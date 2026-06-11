@@ -4,3 +4,6 @@ node_modules/
 .claude/
 
 # dist/ is committed on purpose so the GitHub Pages demo and CDN usage work.
+
+# The video-player example's sample footage (too large for git; drop any mp4 in examples/).
+examples/*.mp4

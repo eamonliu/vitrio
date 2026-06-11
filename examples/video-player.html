@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>vitrio · Liquid-glass video player</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    color: rgba(255,255,255,.92); background: #000;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ============ The refraction source: just the video, full-bleed ============
+     Every glass instance points its `background` here. The clone the library makes
+     contains a second <video>, which the script below keeps in sync with this one —
+     so the glass refracts the live, moving picture. */
+  #video-wrap { position: fixed; inset: 0; background: #000; }
+  #video-wrap video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+  /* Soft scrim so the white controls stay readable on bright frames. */
+  .scrim {
+    position: fixed; inset: auto 0 0 0; height: 220px; pointer-events: none;
+    background: linear-gradient(to top, rgba(0,0,0,.45), transparent);
+  }
+
+  h1 {
+    position: fixed; top: 26px; left: 34px; margin: 0; pointer-events: none;
+    font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+    text-shadow: 0 1px 10px rgba(0,0,0,.6);
+  }
+  h1 small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .22em;
+             text-transform: uppercase; color: rgba(255,255,255,.6); margin-top: 4px; }
+
+  /* ============ Control panel content ============
+     This is ordinary interactive DOM. The glass plate is attached *behind* it
+     (non-draggable plates have pointer-events: none, so clicks land here). */
+  .panel {
+    position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px;
+    width: min(640px, calc(100vw - 64px));
+    padding: 12px 18px;
+    z-index: 20; /* above the glass plate (its lens is z 10, plate z 11) */
+  }
+  .panel button {
+    font: inherit; font-size: 18px; line-height: 1; color: #fff;
+    background: none; border: none; cursor: pointer;
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    text-shadow: 0 1px 8px rgba(0,0,0,.5);
+  }
+  .panel button:hover { background: rgba(255,255,255,.14); }
+  .panel #play { font-size: 22px; }
+  .panel .time {
+    font-size: 12px; font-variant-numeric: tabular-nums; min-width: 38px;
+    color: rgba(255,255,255,.85); text-align: center; text-shadow: 0 1px 6px rgba(0,0,0,.6);
+  }
+
+  /* Progress bar: a printed track; a small glass lens rides it as the thumb. */
+  .bar-hit { flex: 1; padding: 14px 0; cursor: pointer; touch-action: none; }
+  .bar {
+    position: relative; height: 6px; border-radius: 3px;
+    background: rgba(255,255,255,.28);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.10), 0 1px 6px rgba(0,0,0,.35);
+  }
+  .bar .fill {
+    position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 3px;
+    background: linear-gradient(90deg, #58c4ff, #8a7bff);
+  }
+
+  .hint {
+    position: fixed; left: 18px; bottom: 16px; font-size: 12px; color: rgba(255,255,255,.55);
+    background: rgba(0,0,0,.35); padding: 8px 14px; border-radius: 20px; pointer-events: none;
+    z-index: 30;
+  }
+  #load-error {
+    position: fixed; inset: 0; display: none; place-items: center; text-align: center;
+    font-size: 14px; line-height: 1.8; color: rgba(255,255,255,.8); z-index: 50;
+  }
+</style>
+</head>
+<body>
+
+  <div id="video-wrap">
+    <video id="video" src="14074831_1920_1080_30fps.mp4" loop muted playsinline preload="auto"></video>
+  </div>
+  <div class="scrim"></div>
+
+  <h1>Glass over video<small>live refraction · vitrio</small></h1>
+
+  <div id="panel" class="panel">
+    <button id="play" aria-label="Play / pause">▶</button>
+    <span id="cur" class="time">0:00</span>
+    <div id="bar-hit" class="bar-hit"><div class="bar"><div id="fill" class="fill"></div></div></div>
+    <span id="dur" class="time">0:00</span>
+    <button id="mute" aria-label="Mute / unmute">🔇</button>
+  </div>
+
+  <div class="hint">Drag the floating lens over the video · the panel and thumb are glass too</div>
+  <div id="load-error">The demo video could not be loaded.<br>
+    Place an mp4 named <code>14074831_1920_1080_30fps.mp4</code> in <code>examples/</code>
+    (in Safari, serve the repo over http: <code>python3 -m http.server</code>).</div>
+
+  <script src="../dist/vitrio.umd.min.js"></script>
+  <script>
+  (() => {
+    const LiquidGlass = window.LiquidGlass;
+    const $ = (id) => document.getElementById(id);
+    const wrap = $('video-wrap'), video = $('video');
+    const playBtn = $('play'), muteBtn = $('mute');
+    const cur = $('cur'), dur = $('dur'), fill = $('fill');
+    const barHit = $('bar-hit'), bar = barHit.firstElementChild;
+
+    video.addEventListener('error', () => { $('load-error').style.display = 'grid'; });
+
+    /* ====== Glass instances — all refract #video-wrap (the moving picture) ====== */
+
+    // The control panel surface: one wide plate pinned behind the controls.
+    const panelGlass = new LiquidGlass({
+      background: wrap, zIndex: 10,
+      attachTo: $('panel'),
+      radius: 32, scale: 18, depth: 26, curvature: 2.6, chroma: 0.08,
+      blur: 1.5, glow: 0.12, edge: 0.55, tint: 0.06, tintColor: '#ffffff',
+    });
+
+    // The progress thumb: a small round lens riding the printed track.
+    const THUMB = 40;
+    const thumb = new LiquidGlass({
+      background: wrap, draggable: false, zIndex: 12,
+      width: THUMB, height: THUMB, radius: THUMB / 2,
+      scale: 26, depth: THUMB / 2, curvature: 2, convexity: 1, chroma: 0.22, glow: 0.1, edge: 0.5,
+    });
+
+    // A big draggable magnifier — drag it over the moving video.
+    const lens = new LiquidGlass({
+      background: wrap, draggable: true, zIndex: 40,
+      width: 180, height: 180, radius: 90,
+      scale: 56, depth: 90, curvature: 2, convexity: 1, chroma: 0.14, glow: 0.1, edge: 0.45,
+      x: Math.round(window.innerWidth * 0.72), y: Math.round(window.innerHeight * 0.18),
+    });
+
+    /* ====== Keep the cloned <video> elements inside each lens playing in sync ======
+       Clone mode normally snapshots static DOM, but a cloned <video> is itself a live
+       player — it just starts paused at t=0. Mirror the master's play state and clock
+       into every clone (and re-snap when drift creeps past ~0.12 s). */
+    function syncClones(hard) {
+      const t = video.currentTime;
+      for (const v of document.querySelectorAll('.lqg-lens video')) {
+        v.muted = true; // only the master makes sound
+        if (hard || Math.abs(v.currentTime - t) > 0.12) v.currentTime = t;
+        if (video.paused) { if (!v.paused) v.pause(); }
+        else if (v.paused) { v.play().catch(() => {}); }
+      }
+    }
+    setInterval(syncClones, 400);
+    for (const ev of ['play', 'pause', 'seeked', 'ratechange']) {
+      video.addEventListener(ev, () => syncClones(true));
+    }
+
+    /* ====== Player logic ====== */
+    const fmt = (s) => {
+      s = Math.max(0, Math.floor(s || 0));
+      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    };
+
+    function togglePlay() {
+      if (video.paused) video.play().catch(() => {});
+      else video.pause();
+    }
+    playBtn.addEventListener('click', togglePlay);
+    video.addEventListener('play', () => { playBtn.textContent = '⏸'; });
+    video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
+
+    muteBtn.addEventListener('click', () => {
+      video.muted = !video.muted;
+      muteBtn.textContent = video.muted ? '🔇' : '🔊';
+    });
+
+    video.addEventListener('loadedmetadata', () => { dur.textContent = fmt(video.duration); });
+
+    // Progress: paint the fill and ride the glass thumb along the track every frame.
+    function placeThumb() {
+      const r = bar.getBoundingClientRect();
+      const p = video.duration ? video.currentTime / video.duration : 0;
+      fill.style.width = (p * 100).toFixed(2) + '%';
+      thumb.moveTo(Math.round(r.left + p * r.width - THUMB / 2),
+                   Math.round(r.top + r.height / 2 - THUMB / 2));
+    }
+    (function raf() { placeThumb(); requestAnimationFrame(raf); })();
+
+    // Seek by pointer on the track.
+    let scrubbing = false, wasPlaying = false;
+    function seekFromEvent(ev) {
+      const r = bar.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+      if (video.duration) video.currentTime = p * video.duration;
+    }
+    barHit.addEventListener('pointerdown', (ev) => {
+      scrubbing = true;
+      wasPlaying = !video.paused;
+      video.pause();
+      barHit.setPointerCapture(ev.pointerId);
+      seekFromEvent(ev);
+    });
+    barHit.addEventListener('pointermove', (ev) => { if (scrubbing) seekFromEvent(ev); });
+    const endScrub = () => {
+      if (!scrubbing) return;
+      scrubbing = false;
+      if (wasPlaying) video.play().catch(() => {});
+    };
+    barHit.addEventListener('pointerup', endScrub);
+    barHit.addEventListener('pointercancel', endScrub);
+
+    // Click the video itself to play/pause; start playing once it can.
+    wrap.addEventListener('click', togglePlay);
+    video.addEventListener('canplay', () => { video.play().catch(() => {}); }, { once: true });
+  })();
+  </script>
+</body>
+</html>
