@@ -13,7 +13,7 @@ Cross-browser **liquid-glass refraction** for the web — real optical displacem
 - 🖱️ Draggable, fully runtime-configurable.
 - ⚛️ First-class **React** and **Vue 3** wrappers: `vitrio/react`, `vitrio/vue`.
 
-> **Live demo:** open `index.html` (full playground) or `example.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/vitrio/).
+> **Live demo:** open `index.html` (full playground), `examples/ui-components.html` (glass applied to real UI — button, toggle, slider, media player) or `examples/web-component.html` (one-tag web component) — or visit the [GitHub Pages demo](https://eamonliu.github.io/vitrio/).
 
 ---
 

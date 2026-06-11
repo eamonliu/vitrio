@@ -51,8 +51,9 @@
     "build:vue": "esbuild src/vue.ts --bundle --format=esm --external:vue --sourcemap --outfile=dist/vue.esm.js",
     "build:vue:cjs": "esbuild src/vue.ts --bundle --format=cjs --external:vue --sourcemap --outfile=dist/vue.cjs",
     "build:demo": "esbuild src/demo.ts --bundle --format=iife --minify --outfile=dist/demo.min.js",
+    "build:examples": "esbuild examples/ui-components.ts --bundle --format=iife --minify --outfile=examples/ui-components.js",
     "build:types": "tsc -p tsconfig.build.json",
-    "build": "npm run clean && npm run typecheck && npm run build:esm && npm run build:esm:min && npm run build:cjs && npm run build:umd && npm run build:umd:min && npm run build:react && npm run build:react:cjs && npm run build:vue && npm run build:vue:cjs && npm run build:demo && npm run build:types",
+    "build": "npm run clean && npm run typecheck && npm run build:esm && npm run build:esm:min && npm run build:cjs && npm run build:umd && npm run build:umd:min && npm run build:react && npm run build:react:cjs && npm run build:vue && npm run build:vue:cjs && npm run build:demo && npm run build:examples && npm run build:types",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>vitrio · Liquid-glass UI components</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    color: rgba(255,255,255,.92); background: #05060a;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ============ The scene: everything inside is refractable (it gets cloned) ============ */
+  #scene { position: fixed; inset: 0; overflow: hidden; }
+  .bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(42% 52% at 18% 22%, rgba(120, 80, 255, .50), transparent 70%),
+      radial-gradient(45% 55% at 84% 18%, rgba(0, 200, 255, .38), transparent 70%),
+      radial-gradient(52% 62% at 62% 88%, rgba(255, 70, 160, .38), transparent 70%),
+      radial-gradient(40% 50% at 8% 86%, rgba(60, 255, 190, .28), transparent 70%),
+      #07070f;
+  }
+  .bg-grid {
+    position: absolute; inset: -2px;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.07) 0 1px, transparent 1px 42px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.07) 0 1px, transparent 1px 42px);
+  }
+
+  .stage {
+    position: relative; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 58px; padding: 24px;
+  }
+  header { text-align: center; }
+  header h1 {
+    margin: 0; font-size: clamp(34px, 5vw, 56px); font-weight: 800; letter-spacing: -0.03em;
+    background: linear-gradient(90deg, #ff8a5b, #ff5bb0, #8a7bff, #58c4ff);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  header p { margin: 8px 0 0; font-size: 14px; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+
+  .row { display: flex; align-items: center; justify-content: center; gap: clamp(40px, 7vw, 110px); flex-wrap: wrap; }
+  .demo { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .demo-label { font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: rgba(255,255,255,.45); }
+
+  /* Button: the glass plate is the button surface; this is just its label. */
+  .btn-label { font-size: 17px; font-weight: 600; cursor: pointer; padding: 4px 2px; letter-spacing: .01em; }
+  .btn-label .arrow { color: #8ad2ff; }
+
+  /* Toggle: a printed track; the glass knob slides over it and magnifies the labels. */
+  .toggle-track {
+    width: 118px; height: 54px; border-radius: 27px; cursor: pointer;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.18);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 15px; font-size: 11.5px; font-weight: 800; letter-spacing: .08em;
+  }
+  .toggle-track .t-off { color: rgba(255,255,255,.65); }
+  .toggle-track .t-on { color: rgba(255,255,255,.25); }
+  .toggle-track.on { background: rgba(80, 220, 150, .16); border-color: rgba(120, 255, 180, .45); }
+  .toggle-track.on .t-on { color: #7cffb2; text-shadow: 0 0 12px rgba(124,255,178,.8); }
+  .toggle-track.on .t-off { color: rgba(255,255,255,.30); }
+
+  /* Slider: a rainbow track; the glass thumb magnifies it as it passes. */
+  .slider-hit { padding: 24px 0; cursor: pointer; touch-action: none; }
+  .slider-track {
+    width: clamp(220px, 24vw, 300px); height: 10px; border-radius: 5px;
+    background: linear-gradient(90deg, #ff5b8a, #ffb45b, #f4f76e, #58ffa1, #58c4ff, #8a7bff);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 2px 14px rgba(0,0,0,.4);
+  }
+
+  /* Player: content only — the wide glass plate behind it is the card. */
+  .player { display: flex; align-items: center; gap: 16px; padding: 14px 18px; }
+  .player .cover {
+    width: 46px; height: 46px; border-radius: 12px; font-size: 24px;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #8a7bff, #ff5bb0);
+    box-shadow: 0 4px 14px rgba(138,123,255,.45);
+  }
+  .player .meta { line-height: 1.35; min-width: 130px; }
+  .player .meta b { display: block; font-size: 14px; }
+  .player .meta i { display: block; font-size: 12px; font-style: normal; color: rgba(255,255,255,.55); }
+  .player .controls { display: flex; align-items: center; gap: 6px; }
+  .player .controls button {
+    font: inherit; font-size: 17px; line-height: 1; color: #fff;
+    background: none; border: none; cursor: pointer; padding: 8px; border-radius: 50%;
+  }
+  .player .controls button:hover { background: rgba(255,255,255,.12); }
+  .player .controls #play { font-size: 20px; }
+  .player.playing .cover { animation: spin 4s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hint {
+    position: absolute; left: 18px; bottom: 16px; font-size: 12px; color: rgba(255,255,255,.5);
+    background: rgba(0,0,0,.3); padding: 8px 14px; border-radius: 20px; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Everything lives inside #scene so every glass element can refract it,
+       including the components' own tracks and labels. -->
+  <div id="scene">
+    <div class="bg"></div>
+    <div class="bg-grid"></div>
+
+    <main class="stage">
+      <header>
+        <h1>Liquid-glass UI</h1>
+        <p>real components · vitrio</p>
+      </header>
+
+      <div class="row">
+        <div class="demo">
+          <span class="demo-label">Button</span>
+          <span id="btn" class="btn-label">Get started <span class="arrow">→</span></span>
+        </div>
+        <div class="demo">
+          <span class="demo-label">Toggle</span>
+          <div id="toggle" class="toggle-track"><span class="t-off">OFF</span><span class="t-on">ON</span></div>
+        </div>
+        <div class="demo">
+          <span class="demo-label">Slider</span>
+          <div id="slider" class="slider-hit"><div class="slider-track"></div></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="demo">
+          <span class="demo-label">Now playing</span>
+          <div id="player" class="player">
+            <div class="cover">🫧</div>
+            <div class="meta"><b>Refraction</b><i>vitrio — liquid glass</i></div>
+            <div class="controls">
+              <button id="prev" aria-label="Previous">⏮</button>
+              <button id="play" aria-label="Play">▶</button>
+              <button id="next" aria-label="Next">⏭</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="hint">Click the components · drag the floating lens over anything</div>
+  </div>
+
+  <script src="../dist/vitrio.umd.min.js"></script>
+  <!-- Example logic lives in ui-components.ts (TypeScript), built to ui-components.js -->
+  <script src="ui-components.js"></script>
+</body>
+</html>
