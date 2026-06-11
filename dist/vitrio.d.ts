@@ -59,6 +59,11 @@ export interface LiquidGlassParams {
     /** Tint colour (any CSS colour). */
     tintColor: string;
 }
+/** Extra glass size around an attached anchor, in px (one value or per-axis). */
+export type AttachPadding = number | {
+    x: number;
+    y: number;
+};
 /** Constructor options: every parameter, plus placement/behaviour. */
 export interface LiquidGlassOptions extends Partial<LiquidGlassParams> {
     /** Element to refract. It is cloned (clone mode), so the effect works cross-browser. */
@@ -71,6 +76,15 @@ export interface LiquidGlassOptions extends Partial<LiquidGlassParams> {
     x?: number;
     /** Initial screen Y of the glass top-left. Defaults to centered. */
     y?: number;
+    /**
+     * Anchor element: the glass continuously follows the anchor's screen rect
+     * (position AND size, tracked every frame), so it stays glued to ordinary
+     * layout-flow UI — including CSS transitions and animated positions.
+     * Overrides x/y/width/height and disables dragging.
+     */
+    attachTo?: Element | null;
+    /** Extra glass size around the attached anchor's rect, in px. Default 0. */
+    attachPadding?: AttachPadding;
 }
 /** Default parameters (based on a "strong refraction" look, with tint 0 and a light chroma). */
 export declare const DEFAULTS: LiquidGlassParams;
@@ -89,6 +103,10 @@ export declare class LiquidGlass {
     private uid;
     private zIndex;
     private draggable;
+    private _anchor;
+    private _padX;
+    private _padY;
+    private _attachRaf;
     private margin;
     private bgX;
     private bgY;
@@ -136,6 +154,14 @@ export declare class LiquidGlass {
     get<K extends keyof LiquidGlassParams>(key: K): LiquidGlassParams[K];
     /** Move the glass. x/y are the screen coordinates of its top-left corner. */
     moveTo(x: number, y: number): this;
+    /**
+     * Pin the glass to an anchor element. Its screen rect is re-read every frame, so the
+     * glass follows layout changes, scrolling and CSS transitions of the anchor. The glass
+     * size becomes anchor size + 2 * padding (maps rebuild only when the size changes).
+     * Pass null to detach (the glass stays where it is).
+     */
+    attach(el: Element | null, padding?: AttachPadding): this;
+    private _syncAttach;
     /** Swap the background element being refracted. */
     setBackground(el: Element | null): this;
     /** Remove all DOM, filters and listeners created by this instance. */

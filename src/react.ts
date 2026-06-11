@@ -22,7 +22,7 @@
  */
 import { useEffect, useRef } from 'react';
 import LiquidGlassCore, { DEFAULTS } from './vitrio.js';
-import type { LiquidGlassParams } from './vitrio.js';
+import type { AttachPadding, LiquidGlassParams } from './vitrio.js';
 
 /** Anything that can designate the element to refract. */
 export type BackgroundProp = Element | string | { current: Element | null } | null;
@@ -47,6 +47,13 @@ export interface LiquidGlassProps extends Partial<LiquidGlassParams> {
   glassRef?: GlassRef;
   /** Called once the instance has been created. */
   onReady?: (glass: LiquidGlassCore) => void;
+  /**
+   * Anchor to pin the glass to (element / selector / React ref). The glass follows the
+   * anchor's screen rect every frame. Overrides x/y/width/height and disables dragging.
+   */
+  attachTo?: BackgroundProp;
+  /** Extra glass size around the attached anchor's rect, in px. */
+  attachPadding?: AttachPadding;
 }
 
 const PARAM_KEYS = Object.keys(DEFAULTS) as (keyof LiquidGlassParams)[];
@@ -85,6 +92,8 @@ export function LiquidGlass(props: LiquidGlassProps): null {
     const glass = new LiquidGlassCore({
       ...pickParams(p),
       background: resolveBackground(p.background),
+      attachTo: resolveBackground(p.attachTo),
+      attachPadding: p.attachPadding,
       draggable: p.draggable,
       zIndex: p.zIndex,
       x: p.x, y: p.y,
@@ -124,6 +133,28 @@ export function LiquidGlass(props: LiquidGlassProps): null {
     if (el !== glass.background) glass.setBackground(el);
   }, [bg]);
 
+  /* Keep the anchor bound to the latest element. The anchor may resolve to null on the
+     first attempts (refs and selector targets can appear after a later render in another
+     subtree), so retry on animation frames until it exists. */
+  const boundAnchor = useRef<Element | null>(null);
+  const retryRaf = useRef(0);
+  useEffect(() => {
+    const bind = (): void => {
+      retryRaf.current = 0;
+      const glass = glassRef.current;
+      const p = propsRef.current;
+      if (!glass || p.attachTo === undefined) return;
+      const el = resolveBackground(p.attachTo);
+      if (!el && !boundAnchor.current) { retryRaf.current = requestAnimationFrame(bind); return; }
+      if (el && el !== boundAnchor.current) {
+        boundAnchor.current = el;
+        glass.attach(el, p.attachPadding);
+      }
+    };
+    cancelAnimationFrame(retryRaf.current);
+    bind();
+  });
+
   /* Reposition when x/y change. */
   const { x, y } = props;
   useEffect(() => {
@@ -135,6 +166,97 @@ export function LiquidGlass(props: LiquidGlassProps): null {
   return null;
 }
 
+/** Options for `useLiquidGlass` — every glass parameter plus overlay behaviour. */
+export interface UseLiquidGlassOptions extends Partial<LiquidGlassParams> {
+  /** Element to refract (element / selector / React ref). */
+  background?: BackgroundProp;
+  /** z-index of the lens layer. Default 100. */
+  zIndex?: number;
+  /** Extra glass size around the anchor's rect, in px. */
+  padding?: AttachPadding;
+}
+
+/**
+ * Pin a glass plate to an anchor element — the idiomatic way to give an existing
+ * component (a button, a card, a slider thumb...) a liquid-glass surface.
+ *
+ *   const btnRef = useRef<HTMLButtonElement>(null);
+ *   const glass = useLiquidGlass(btnRef, { background: sceneRef, padding: 10, scale: 24 });
+ *
+ * The glass follows the anchor's rect every frame (transitions included), parameters are
+ * reactive, and the returned ref holds the core instance (e.g. `glass.current?.refresh()`).
+ */
+export function useLiquidGlass(
+  anchor: { current: Element | null },
+  options: UseLiquidGlassOptions = {},
+): { current: LiquidGlassCore | null } {
+  const glassRef = useRef<LiquidGlassCore | null>(null);
+  const boundAnchor = useRef<Element | null>(null);
+  const retryRaf = useRef(0);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+
+  /* Destroy on unmount. */
+  useEffect(() => () => {
+    cancelAnimationFrame(retryRaf.current);
+    glassRef.current?.destroy();
+    glassRef.current = null;
+  }, []);
+
+  /* Create lazily once the anchor element exists, then keep anchor + background bound.
+     The anchor ref may still be null here — e.g. Radix slider thumbs mount only after
+     measuring, and that re-render happens inside the Radix subtree where this hook
+     can't see it — so when it's missing we retry on animation frames. */
+  useEffect(() => {
+    const tryBind = (): void => {
+      retryRaf.current = 0;
+      const o = optionsRef.current;
+      const el = anchor.current;
+      let glass = glassRef.current;
+      if (!glass) {
+        if (!el) { retryRaf.current = requestAnimationFrame(tryBind); return; }
+        glass = new LiquidGlassCore({
+          ...pickParams(o),
+          background: resolveBackground(o.background),
+          attachTo: el,
+          attachPadding: o.padding,
+          draggable: false,
+          zIndex: o.zIndex,
+        });
+        glassRef.current = glass;
+        boundAnchor.current = el;
+        return;
+      }
+      if (el !== boundAnchor.current && el) {
+        boundAnchor.current = el;
+        glass.attach(el, o.padding);
+      }
+      const bg = resolveBackground(o.background);
+      if (bg !== glass.background) glass.setBackground(bg);
+    };
+    cancelAnimationFrame(retryRaf.current);
+    tryBind();
+  });
+
+  /* Sync parameters; only push the ones that actually changed. */
+  useEffect(() => {
+    const glass = glassRef.current;
+    if (!glass) return;
+    const partial: Partial<LiquidGlassParams> = {};
+    let dirty = false;
+    for (const k of PARAM_KEYS) {
+      const v = options[k];
+      if (v !== undefined && v !== glass.params[k]) {
+        (partial as Record<string, number | string>)[k] = v;
+        dirty = true;
+      }
+    }
+    if (dirty) glass.set(partial);
+  }, PARAM_KEYS.map((k) => options[k]));
+
+  return glassRef;
+}
+
 export default LiquidGlass;
 export { LiquidGlassCore, DEFAULTS };
-export type { LiquidGlassParams, LiquidGlassOptions } from './vitrio.js';
+export type { AttachPadding, LiquidGlassParams, LiquidGlassOptions } from './vitrio.js';

@@ -83,6 +83,8 @@ To stay cross-browser it uses **clone mode**: the background element you point i
 | `draggable` | `boolean` | `true` | Allow pointer dragging. |
 | `zIndex` | `number` | `100` | z-index of the lens layer (glass sits at `z+1`). |
 | `x`, `y` | `number` | centered | Initial screen position of the glass top-left. |
+| `attachTo` | `Element \| null` | `null` | Anchor element: the glass follows its screen rect every frame (transitions included). Overrides x/y/width/height; disables dragging. |
+| `attachPadding` | `number \| {x, y}` | `0` | Extra glass size around the attached anchor's rect, in px. |
 
 ### Parameters
 
@@ -109,13 +111,14 @@ To stay cross-browser it uses **clone mode**: the background element you point i
 | `set(partial)` | Update one or more parameters (rebuilds maps only when needed). |
 | `get(key?)` | Get one parameter, or a copy of all. |
 | `moveTo(x, y)` | Move the glass (screen coords of its top-left). |
+| `attach(el, padding?)` | Pin the glass to an anchor element (follows its rect every frame). `null` detaches. |
 | `setBackground(el)` | Swap the refracted element. |
 | `refresh()` | Re-clone the background and rebuild (call after it changes). |
 | `destroy()` | Remove all DOM, filters and listeners. |
 
 ### Web component attributes
 
-Every parameter is an attribute (camelCase → kebab-case, e.g. `spec-angle`, `tint-color`), plus `background` (a CSS selector), `draggable`, `z-index`, `x`, `y`. Attributes are reactive.
+Every parameter is an attribute (camelCase → kebab-case, e.g. `spec-angle`, `tint-color`), plus `background` (a CSS selector), `attach-to` (a CSS selector), `attach-padding`, `draggable`, `z-index`, `x`, `y`. Attributes are reactive.
 
 ---
 
@@ -140,7 +143,21 @@ function App() {
 }
 ```
 
-`background` accepts an element, a CSS selector or a React ref. Extra props: `draggable` / `zIndex` (create-time only), `x` / `y` (reactive position), `glassRef` (a ref or callback that receives the core instance) and `onReady`.
+`background` accepts an element, a CSS selector or a React ref. Extra props: `attachTo` / `attachPadding` (pin the glass to an anchor), `draggable` / `zIndex` (create-time only), `x` / `y` (reactive position), `glassRef` (a ref or callback that receives the core instance) and `onReady`.
+
+To give an **existing component** a glass surface, use the `useLiquidGlass` hook — it pins a plate to an anchor ref and follows it every frame (CSS transitions included):
+
+```jsx
+import { useLiquidGlass } from 'vitrio/react';
+
+const btnRef = useRef(null);
+const glass = useLiquidGlass(btnRef, { background: sceneRef, padding: { x: 12, y: 8 }, scale: 22 });
+// glass.current?.refresh() after the scene's appearance changes
+
+<button ref={btnRef}>Get started</button>
+```
+
+See **`examples/react-shadcn/`** for a full app where glass surfaces are attached to real [shadcn/ui](https://ui.shadcn.com) components (Button, Switch, Slider, Card) without changing their behaviour.
 
 ### Vue 3 — `vitrio/vue`
 
@@ -155,7 +172,7 @@ import { LiquidGlass } from 'vitrio/vue';
 </template>
 ```
 
-Props mirror the parameters (kebab-case works in templates, e.g. `:spec-angle`); `background` accepts an element or a CSS selector. The core instance is emitted via `@ready` and exposed as `glass` on the template ref.
+Props mirror the parameters (kebab-case works in templates, e.g. `:spec-angle`); `background` and `attach-to` accept an element or a CSS selector (`attach-to` pins the glass to that element's rect). The core instance is emitted via `@ready` and exposed as `glass` on the template ref.
 
 ### Other frameworks
 

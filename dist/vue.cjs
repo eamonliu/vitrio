@@ -80,6 +80,10 @@ var LiquidGlass = class {
     this.lensX = 0;
     /** Screen Y of the glass top-left. */
     this.lensY = 0;
+    this._anchor = null;
+    this._padX = 0;
+    this._padY = 0;
+    this._attachRaf = 0;
     this.margin = 60;
     this.bgX = 0;
     this.bgY = 0;
@@ -91,7 +95,7 @@ var LiquidGlass = class {
     this.uid = _ns + ++_uid;
     this.background = opts.background || null;
     this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
-    this.draggable = opts.draggable !== false;
+    this.draggable = opts.draggable !== false && !opts.attachTo;
     this.params = { ...DEFAULTS };
     for (const k of Object.keys(DEFAULTS)) {
       const v = opts[k];
@@ -108,6 +112,7 @@ var LiquidGlass = class {
     this.lensX = x;
     this.lensY = y;
     this.refresh();
+    if (opts.attachTo) this.attach(opts.attachTo, opts.attachPadding);
   }
   static {
     /** Built-in default parameters. */
@@ -359,6 +364,47 @@ var LiquidGlass = class {
     this.placeLens();
     return this;
   }
+  /**
+   * Pin the glass to an anchor element. Its screen rect is re-read every frame, so the
+   * glass follows layout changes, scrolling and CSS transitions of the anchor. The glass
+   * size becomes anchor size + 2 * padding (maps rebuild only when the size changes).
+   * Pass null to detach (the glass stays where it is).
+   */
+  attach(el, padding) {
+    if (padding != null) {
+      const p = typeof padding === "number" ? { x: padding, y: padding } : padding;
+      this._padX = p.x;
+      this._padY = p.y;
+    }
+    this._anchor = el;
+    cancelAnimationFrame(this._attachRaf);
+    this._attachRaf = 0;
+    if (el) {
+      const loop = () => {
+        this._syncAttach();
+        this._attachRaf = requestAnimationFrame(loop);
+      };
+      loop();
+    }
+    return this;
+  }
+  /* One attach-tracking step: follow the anchor rect; cheap unless something changed. */
+  _syncAttach() {
+    const a = this._anchor;
+    if (!a) return;
+    const r = a.getBoundingClientRect();
+    const w = Math.max(2, Math.round(r.width + 2 * this._padX));
+    const h = Math.max(2, Math.round(r.height + 2 * this._padY));
+    const x = Math.round(r.left - this._padX);
+    const y = Math.round(r.top - this._padY);
+    if (w !== this.params.width || h !== this.params.height) {
+      this.lensX = x;
+      this.lensY = y;
+      this.set({ width: w, height: h });
+    } else if (x !== Math.round(this.lensX) || y !== Math.round(this.lensY)) {
+      this.moveTo(x, y);
+    }
+  }
   /** Swap the background element being refracted. */
   setBackground(el) {
     this.background = el;
@@ -369,6 +415,8 @@ var LiquidGlass = class {
   destroy() {
     cancelAnimationFrame(this._raf);
     cancelAnimationFrame(this._syncRaf);
+    cancelAnimationFrame(this._attachRaf);
+    this._anchor = null;
     window.removeEventListener("scroll", this._onSync, true);
     window.removeEventListener("resize", this._onSync);
     this.glassEl.remove();
@@ -444,7 +492,7 @@ if (typeof HTMLElement !== "undefined") {
       this.glass = null;
     }
     static get observedAttributes() {
-      return Object.keys(ATTRS).concat(["background", "draggable", "x", "y", "z-index"]);
+      return Object.keys(ATTRS).concat(["background", "draggable", "x", "y", "z-index", "attach-to", "attach-padding"]);
     }
     connectedCallback() {
       if (this.glass) return;
@@ -455,9 +503,12 @@ if (typeof HTMLElement !== "undefined") {
         return v == null ? void 0 : parseFloat(v);
       };
       const bgSel = at("background");
+      const atSel = at("attach-to");
       const zIdx = at("z-index");
       const opts = {
         background: bgSel ? document.querySelector(bgSel) : null,
+        attachTo: atSel ? document.querySelector(atSel) : null,
+        attachPadding: num("attach-padding"),
         draggable: at("draggable") !== "false",
         zIndex: zIdx != null ? parseInt(zIdx, 10) : void 0,
         x: num("x"),
@@ -481,6 +532,12 @@ if (typeof HTMLElement !== "undefined") {
       if (!this.glass) return;
       if (name === "background") {
         this.glass.setBackground(val ? document.querySelector(val) : null);
+        return;
+      }
+      if (name === "attach-to" || name === "attach-padding") {
+        const sel = this.getAttribute("attach-to");
+        const pad = this.getAttribute("attach-padding");
+        this.glass.attach(sel ? document.querySelector(sel) : null, pad != null ? parseFloat(pad) : void 0);
         return;
       }
       if (name === "x" || name === "y") {
@@ -507,6 +564,10 @@ var LiquidGlass2 = (0, import_vue.defineComponent)({
   props: {
     /** Element to refract: an Element or a CSS selector. */
     background: { type: [Object, String], default: null },
+    /** Anchor to pin the glass to (element or selector): follows its rect every frame. */
+    attachTo: { type: [Object, String], default: null },
+    /** Extra glass size around the attached anchor's rect, in px. */
+    attachPadding: { type: [Number, Object], default: void 0 },
     /** Whether the glass can be dragged. Create-time only. */
     draggable: { type: Boolean, default: true },
     /** z-index of the lens layer (glass sits at z + 1). Create-time only. */
@@ -544,6 +605,8 @@ var LiquidGlass2 = (0, import_vue.defineComponent)({
       const g = new vitrio_default({
         ...pickParams(),
         background: resolveBackground(props.background),
+        attachTo: resolveBackground(props.attachTo),
+        attachPadding: props.attachPadding,
         draggable: props.draggable,
         zIndex: props.zIndex,
         x: props.x,
@@ -580,6 +643,12 @@ var LiquidGlass2 = (0, import_vue.defineComponent)({
         if (!g) return;
         const el = resolveBackground(bg);
         if (el !== g.background) g.setBackground(el);
+      }
+    );
+    (0, import_vue.watch)(
+      () => props.attachTo,
+      (anchor) => {
+        glass.value?.attach(resolveBackground(anchor), props.attachPadding);
       }
     );
     (0, import_vue.watch)(

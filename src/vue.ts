@@ -21,7 +21,7 @@
 import { defineComponent, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue';
 import type { PropType } from 'vue';
 import LiquidGlassCore, { DEFAULTS } from './vitrio.js';
-import type { LiquidGlassParams } from './vitrio.js';
+import type { AttachPadding, LiquidGlassParams } from './vitrio.js';
 
 /** Anything that can designate the element to refract. */
 export type BackgroundProp = Element | string | null;
@@ -37,6 +37,10 @@ export const LiquidGlass = defineComponent({
   props: {
     /** Element to refract: an Element or a CSS selector. */
     background: { type: [Object, String] as PropType<BackgroundProp>, default: null },
+    /** Anchor to pin the glass to (element or selector): follows its rect every frame. */
+    attachTo: { type: [Object, String] as PropType<BackgroundProp>, default: null },
+    /** Extra glass size around the attached anchor's rect, in px. */
+    attachPadding: { type: [Number, Object] as PropType<AttachPadding>, default: undefined },
     /** Whether the glass can be dragged. Create-time only. */
     draggable: { type: Boolean, default: true },
     /** z-index of the lens layer (glass sits at z + 1). Create-time only. */
@@ -76,6 +80,8 @@ export const LiquidGlass = defineComponent({
       const g = new LiquidGlassCore({
         ...pickParams(),
         background: resolveBackground(props.background),
+        attachTo: resolveBackground(props.attachTo),
+        attachPadding: props.attachPadding,
         draggable: props.draggable,
         zIndex: props.zIndex,
         x: props.x, y: props.y,
@@ -119,6 +125,14 @@ export const LiquidGlass = defineComponent({
       }
     );
 
+    /* Re-attach when the anchor changes. */
+    watch(
+      () => props.attachTo,
+      (anchor) => {
+        glass.value?.attach(resolveBackground(anchor), props.attachPadding);
+      }
+    );
+
     /* Reposition when x/y change. */
     watch(
       [() => props.x, () => props.y],
@@ -137,4 +151,4 @@ export const LiquidGlass = defineComponent({
 
 export default LiquidGlass;
 export { LiquidGlassCore, DEFAULTS };
-export type { LiquidGlassParams, LiquidGlassOptions } from './vitrio.js';
+export type { AttachPadding, LiquidGlassParams, LiquidGlassOptions } from './vitrio.js';

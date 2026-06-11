@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* shadcn/ui semantic tokens (dark, tuned for the glass scene) — Tailwind v4 theme. */
+@theme {
+  --color-background: #0b0c14;
+  --color-foreground: #f3f3f8;
+  --color-card: rgb(255 255 255 / 6%);
+  --color-card-foreground: #f3f3f8;
+  --color-primary: #f3f3f8;
+  --color-primary-foreground: #15162a;
+  --color-secondary: rgb(255 255 255 / 10%);
+  --color-secondary-foreground: #f3f3f8;
+  --color-muted: rgb(255 255 255 / 8%);
+  --color-muted-foreground: rgb(255 255 255 / 60%);
+  --color-accent: rgb(255 255 255 / 14%);
+  --color-accent-foreground: #f3f3f8;
+  --color-border: rgb(255 255 255 / 18%);
+  --color-input: rgb(255 255 255 / 12%);
+  --color-ring: #8a7bff;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #05060a;
+  color: var(--color-foreground);
+  font-family: -apple-system, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}

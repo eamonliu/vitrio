@@ -5,41 +5,24 @@
    The whole page lives inside #scene, which every glass instance refracts. Non-draggable
    glass plates have pointer-events: none, so clicks land on the real elements beneath
    them — the components stay ordinary interactive DOM. */
-import type { LiquidGlass as Glass, LiquidGlassParams } from '../src/vitrio.js';
+import type { LiquidGlass as Glass } from '../src/vitrio.js';
 
 const LiquidGlass = window.LiquidGlass;
 const scene = document.getElementById('scene')!;
 const $ = (id: string): HTMLElement => document.getElementById(id)!;
 
-/* ---------- helper: keep a glass plate over an anchor element ---------- */
-interface Overlay { glass: Glass; place: () => void; }
-
-function overlay(anchor: HTMLElement, padX: number, padY: number,
-                 params: Partial<LiquidGlassParams>, zIndex: number): Overlay {
-  const r = anchor.getBoundingClientRect();
-  const glass = new LiquidGlass({
-    background: scene, draggable: false, zIndex,
-    x: Math.round(r.left - padX), y: Math.round(r.top - padY),
-    width: Math.round(r.width + 2 * padX), height: Math.round(r.height + 2 * padY),
-    ...params,
-  });
-  const place = (): void => {
-    const b = anchor.getBoundingClientRect();
-    glass.set({ width: Math.round(b.width + 2 * padX), height: Math.round(b.height + 2 * padY) });
-    glass.moveTo(Math.round(b.left - padX), Math.round(b.top - padY));
-  };
-  return { glass, place };
-}
-
-/* ====== Button: the glass plate IS the button surface ====== */
+/* ====== Button: the glass plate IS the button surface ======
+   attachTo pins the plate to the label and live-tracks its rect — no glue code. */
 const btnEl = $('btn');
-const btn = overlay(btnEl, 30, 15, {
+const btnGlass = new LiquidGlass({
+  background: scene, zIndex: 10,
+  attachTo: btnEl, attachPadding: { x: 30, y: 15 },
   radius: 34, scale: 24, depth: 22, curvature: 2.4, chroma: 0.12, glow: 0.14, edge: 0.6,
-}, 10);
-btnEl.addEventListener('pointerenter', () => btn.glass.set({ glow: 0.38 }));
-btnEl.addEventListener('pointerleave', () => btn.glass.set({ glow: 0.14 }));
-btnEl.addEventListener('pointerdown', () => btn.glass.set({ scale: 38 })); // press: bend harder
-window.addEventListener('pointerup', () => btn.glass.set({ scale: 24 }));
+});
+btnEl.addEventListener('pointerenter', () => btnGlass.set({ glow: 0.38 }));
+btnEl.addEventListener('pointerleave', () => btnGlass.set({ glow: 0.14 }));
+btnEl.addEventListener('pointerdown', () => btnGlass.set({ scale: 38 })); // press: bend harder
+window.addEventListener('pointerup', () => btnGlass.set({ scale: 24 }));
 
 /* ====== Toggle: a glass knob slides across the printed track ====== */
 const track = $('toggle');
@@ -112,9 +95,11 @@ placeThumb();
 
 /* ====== Media player: one wide glass plate as the card surface ====== */
 const playerEl = $('player');
-const player = overlay(playerEl, 16, 12, {
+const playerGlass = new LiquidGlass({
+  background: scene, zIndex: 10,
+  attachTo: playerEl, attachPadding: { x: 16, y: 12 },
   radius: 30, scale: 18, depth: 24, curvature: 2.6, chroma: 0.08, glow: 0.12, edge: 0.5,
-}, 10);
+});
 const playBtn = $('play');
 let playing = false;
 playBtn.addEventListener('click', () => {
@@ -133,12 +118,12 @@ const lens = new LiquidGlass({
 });
 
 /* ---------- shared upkeep ---------- */
-const all: Glass[] = [btn.glass, knob, thumb, player.glass, lens];
+const all: Glass[] = [btnGlass, knob, thumb, playerGlass, lens];
 function refreshAll(): void { for (const g of all) g.refresh(); }
 
+/* Attached plates follow their anchors automatically; only the free-positioned
+   knob and thumb need re-placing on resize. */
 window.addEventListener('resize', () => {
-  btn.place();
-  player.place();
   placeKnob();
   placeThumb();
 });
