@@ -30,6 +30,12 @@ export interface LiquidGlassProps extends Partial<LiquidGlassParams> {
     attachTo?: BackgroundProp;
     /** Extra glass size around the attached anchor's rect, in px. */
     attachPadding?: AttachPadding;
+    /**
+     * Pause refraction while the glass is moving (a cheap transform stands in), restoring
+     * it on settle — keeps motion at 60 fps on engines with slow SVG filters.
+     * 'auto' (default) = enabled on non-Blink engines (Safari/Firefox). Create-time only.
+     */
+    liteMotion?: boolean | 'auto';
 }
 /** React component driving a LiquidGlass overlay. Renders nothing itself. */
 export declare function LiquidGlass(props: LiquidGlassProps): null;
@@ -41,6 +47,8 @@ export interface UseLiquidGlassOptions extends Partial<LiquidGlassParams> {
     zIndex?: number;
     /** Extra glass size around the anchor's rect, in px. */
     padding?: AttachPadding;
+    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    liteMotion?: boolean | 'auto';
 }
 /**
  * Pin a glass plate to an anchor element — the idiomatic way to give an existing

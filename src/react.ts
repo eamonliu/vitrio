@@ -54,6 +54,12 @@ export interface LiquidGlassProps extends Partial<LiquidGlassParams> {
   attachTo?: BackgroundProp;
   /** Extra glass size around the attached anchor's rect, in px. */
   attachPadding?: AttachPadding;
+  /**
+   * Pause refraction while the glass is moving (a cheap transform stands in), restoring
+   * it on settle — keeps motion at 60 fps on engines with slow SVG filters.
+   * 'auto' (default) = enabled on non-Blink engines (Safari/Firefox). Create-time only.
+   */
+  liteMotion?: boolean | 'auto';
 }
 
 const PARAM_KEYS = Object.keys(DEFAULTS) as (keyof LiquidGlassParams)[];
@@ -94,6 +100,7 @@ export function LiquidGlass(props: LiquidGlassProps): null {
       background: resolveBackground(p.background),
       attachTo: resolveBackground(p.attachTo),
       attachPadding: p.attachPadding,
+      liteMotion: p.liteMotion,
       draggable: p.draggable,
       zIndex: p.zIndex,
       x: p.x, y: p.y,
@@ -174,6 +181,8 @@ export interface UseLiquidGlassOptions extends Partial<LiquidGlassParams> {
   zIndex?: number;
   /** Extra glass size around the anchor's rect, in px. */
   padding?: AttachPadding;
+  /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+  liteMotion?: boolean | 'auto';
 }
 
 /**
@@ -220,6 +229,7 @@ export function useLiquidGlass(
           background: resolveBackground(o.background),
           attachTo: el,
           attachPadding: o.padding,
+          liteMotion: o.liteMotion,
           draggable: false,
           zIndex: o.zIndex,
         });

@@ -85,6 +85,15 @@ export interface LiquidGlassOptions extends Partial<LiquidGlassParams> {
     attachTo?: Element | null;
     /** Extra glass size around the attached anchor's rect, in px. Default 0. */
     attachPadding?: AttachPadding;
+    /**
+     * Lightweight rendering while the glass is in motion. Browsers re-rasterize the SVG
+     * filter chain on every frame the filtered content moves; Blink keeps up at 60 fps but
+     * WebKit (Safari) and Gecko do not. With lite motion, continuous movement (dragging,
+     * attach-follow, scrolling) pauses the refraction filter and approximates the lens with
+     * a cheap compositor-only transform; full refraction is restored once the glass rests.
+     * `'auto'` (default) enables it on non-Blink engines only.
+     */
+    liteMotion?: boolean | 'auto';
 }
 /** Default parameters (based on a "strong refraction" look, with tint 0 and a light chroma). */
 export declare const DEFAULTS: LiquidGlassParams;
@@ -114,6 +123,10 @@ export declare class LiquidGlass {
     private _dragMode;
     private _raf;
     private _syncRaf;
+    private _liteOn;
+    private _lite;
+    private _liteT;
+    private _lastMoveT;
     private canvas;
     private ctx;
     private specCanvas;
@@ -145,6 +158,8 @@ export declare class LiquidGlass {
     private commit;
     private setDragMode;
     private placeLens;
+    private _kickLite;
+    private _liteTransform;
     private _applyVars;
     /** Update one or more parameters. Rebuilds the maps only when needed. */
     set(partial: Partial<LiquidGlassParams>): this;

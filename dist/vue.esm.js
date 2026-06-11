@@ -34,6 +34,9 @@ var LIVE = /* @__PURE__ */ new Set([
 ]);
 var _uid = 0;
 var _ns = "lqg" + Math.random().toString(36).slice(2, 6) + "-";
+var BLINK = typeof navigator !== "undefined" && /Chrome\/\d/.test(navigator.userAgent);
+var LITE_SETTLE_MS = 120;
+var LITE_BURST_MS = 160;
 var _styleEl = null;
 function injectStyle() {
   if (_styleEl || typeof document === "undefined") return;
@@ -64,11 +67,15 @@ var LiquidGlass = class {
     this._dragMode = false;
     this._raf = 0;
     this._syncRaf = 0;
+    this._lite = false;
+    this._liteT = 0;
+    this._lastMoveT = 0;
     injectStyle();
     this.uid = _ns + ++_uid;
     this.background = opts.background || null;
     this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
     this.draggable = opts.draggable !== false && !opts.attachTo;
+    this._liteOn = opts.liteMotion === true || opts.liteMotion !== false && !BLINK;
     this.params = { ...DEFAULTS };
     for (const k of Object.keys(DEFAULTS)) {
       const v = opts[k];
@@ -270,13 +277,14 @@ var LiquidGlass = class {
     this.dispB.setAttribute("scale", (base * (1 - c)).toFixed(2));
     this.dispDrag.setAttribute("scale", base.toFixed(2));
   }
-  /* Safari caches filter output by id; bump the id after a map update to force a refresh. */
+  /* Safari caches filter output by id; bump the id after a map update to force a refresh.
+     While lite motion is engaged the filter stays off — it is re-committed on settle. */
   commit() {
     this._seq++;
     const el = this._dragMode ? this.filterDrag : this.filterFull;
     const id = (this._dragMode ? this.uid + "-drag-" : this.uid + "-full-") + this._seq;
     el.setAttribute("id", id);
-    this.lensEl.style.filter = "url(#" + id + ")";
+    this.lensEl.style.filter = this._lite ? "none" : "url(#" + id + ")";
   }
   setDragMode(on) {
     this._dragMode = on;
@@ -297,6 +305,45 @@ var LiquidGlass = class {
     g.height = p.height + "px";
     g.borderRadius = Math.min(p.radius, p.width / 2, p.height / 2) + "px";
     g.transform = `translate(${Math.round(this.lensX)}px, ${Math.round(this.lensY)}px)`;
+    if (this._lite) this._liteTransform();
+  }
+  /* ---------- Lite motion: pause refraction while the glass is moving ----------
+     Re-rasterizing the filter every frame is what makes motion stutter on WebKit/Gecko.
+     During continuous movement we drop the filter and stand in a transform-based
+     magnification — transform and transform-origin are compositor-only, so the cached
+     lens layer just gets re-composited, never re-rendered. */
+  /* Called on every position change. Two moves within LITE_BURST_MS = continuous motion. */
+  _kickLite() {
+    if (!this._liteOn) return;
+    const now = performance.now();
+    const burst = now - this._lastMoveT < LITE_BURST_MS;
+    this._lastMoveT = now;
+    if (!burst && !this._lite) return;
+    if (!this._lite) {
+      this._lite = true;
+      this.lensEl.style.filter = "none";
+      this._liteTransform();
+    }
+    clearTimeout(this._liteT);
+    this._liteT = window.setTimeout(() => {
+      this._lite = false;
+      this.lensInner.style.transform = "";
+      this.lensInner.style.transformOrigin = "";
+      this.commit();
+    }, LITE_SETTLE_MS);
+  }
+  /* Uniform scale chosen so the content sampled at the lens edge matches what the real
+     refraction shows there (edge displacement = scale px inward), which makes the
+     filter <-> transform switch hard to notice. Sign follows convexity. */
+  _liteTransform() {
+    const p = this.params;
+    const s = Math.min(p.scale, Math.min(p.width, p.height) * 0.45);
+    const c = clamp(p.convexity, -1, 1);
+    const kx = 1 + (p.width / Math.max(1, p.width - 2 * s) - 1) * c;
+    const ky = 1 + (p.height / Math.max(1, p.height - 2 * s) - 1) * c;
+    const st = this.lensInner.style;
+    st.transformOrigin = `${this.lensX + p.width / 2 - this.bgX}px ${this.lensY + p.height / 2 - this.bgY}px`;
+    st.transform = `scale(${clamp(kx, 0.6, 1.6).toFixed(4)}, ${clamp(ky, 0.6, 1.6).toFixed(4)})`;
   }
   _applyVars() {
     const g = this.glassEl.style, p = this.params;
@@ -332,6 +379,7 @@ var LiquidGlass = class {
   }
   /** Move the glass. x/y are the screen coordinates of its top-left corner. */
   moveTo(x, y) {
+    if (x !== this.lensX || y !== this.lensY) this._kickLite();
     this.lensX = x;
     this.lensY = y;
     this.placeLens();
@@ -371,6 +419,7 @@ var LiquidGlass = class {
     const x = Math.round(r.left - this._padX);
     const y = Math.round(r.top - this._padY);
     if (w !== this.params.width || h !== this.params.height) {
+      this._kickLite();
       this.lensX = x;
       this.lensY = y;
       this.set({ width: w, height: h });
@@ -390,6 +439,7 @@ var LiquidGlass = class {
     cancelAnimationFrame(this._syncRaf);
     cancelAnimationFrame(this._attachRaf);
     this._anchor = null;
+    clearTimeout(this._liteT);
     window.removeEventListener("scroll", this._onSync, true);
     window.removeEventListener("resize", this._onSync);
     this.glassEl.remove();
@@ -402,7 +452,9 @@ var LiquidGlass = class {
       if (this._syncRaf) return;
       this._syncRaf = requestAnimationFrame(() => {
         this._syncRaf = 0;
+        const px2 = this.bgX, py2 = this.bgY;
         this._syncBg();
+        if (this.bgX !== px2 || this.bgY !== py2) this._kickLite();
         this.placeLens();
       });
     };
@@ -465,7 +517,7 @@ if (typeof HTMLElement !== "undefined") {
       this.glass = null;
     }
     static get observedAttributes() {
-      return Object.keys(ATTRS).concat(["background", "draggable", "x", "y", "z-index", "attach-to", "attach-padding"]);
+      return Object.keys(ATTRS).concat(["background", "draggable", "x", "y", "z-index", "attach-to", "attach-padding", "lite-motion"]);
     }
     connectedCallback() {
       if (this.glass) return;
@@ -478,10 +530,12 @@ if (typeof HTMLElement !== "undefined") {
       const bgSel = at("background");
       const atSel = at("attach-to");
       const zIdx = at("z-index");
+      const lm = at("lite-motion");
       const opts = {
         background: bgSel ? document.querySelector(bgSel) : null,
         attachTo: atSel ? document.querySelector(atSel) : null,
         attachPadding: num("attach-padding"),
+        liteMotion: lm == null || lm === "auto" ? "auto" : lm !== "false",
         draggable: at("draggable") !== "false",
         zIndex: zIdx != null ? parseInt(zIdx, 10) : void 0,
         x: num("x"),
@@ -541,6 +595,8 @@ var LiquidGlass2 = defineComponent({
     attachTo: { type: [Object, String], default: null },
     /** Extra glass size around the attached anchor's rect, in px. */
     attachPadding: { type: [Number, Object], default: void 0 },
+    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    liteMotion: { type: [Boolean, String], default: "auto" },
     /** Whether the glass can be dragged. Create-time only. */
     draggable: { type: Boolean, default: true },
     /** z-index of the lens layer (glass sits at z + 1). Create-time only. */
@@ -580,6 +636,7 @@ var LiquidGlass2 = defineComponent({
         background: resolveBackground(props.background),
         attachTo: resolveBackground(props.attachTo),
         attachPadding: props.attachPadding,
+        liteMotion: props.liteMotion,
         draggable: props.draggable,
         zIndex: props.zIndex,
         x: props.x,

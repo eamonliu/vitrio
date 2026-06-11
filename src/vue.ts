@@ -41,6 +41,8 @@ export const LiquidGlass = defineComponent({
     attachTo: { type: [Object, String] as PropType<BackgroundProp>, default: null },
     /** Extra glass size around the attached anchor's rect, in px. */
     attachPadding: { type: [Number, Object] as PropType<AttachPadding>, default: undefined },
+    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    liteMotion: { type: [Boolean, String] as PropType<boolean | 'auto'>, default: 'auto' },
     /** Whether the glass can be dragged. Create-time only. */
     draggable: { type: Boolean, default: true },
     /** z-index of the lens layer (glass sits at z + 1). Create-time only. */
@@ -82,6 +84,7 @@ export const LiquidGlass = defineComponent({
         background: resolveBackground(props.background),
         attachTo: resolveBackground(props.attachTo),
         attachPadding: props.attachPadding,
+        liteMotion: props.liteMotion,
         draggable: props.draggable,
         zIndex: props.zIndex,
         x: props.x, y: props.y,

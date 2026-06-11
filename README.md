@@ -85,6 +85,7 @@ To stay cross-browser it uses **clone mode**: the background element you point i
 | `x`, `y` | `number` | centered | Initial screen position of the glass top-left. |
 | `attachTo` | `Element \| null` | `null` | Anchor element: the glass follows its screen rect every frame (transitions included). Overrides x/y/width/height; disables dragging. |
 | `attachPadding` | `number \| {x, y}` | `0` | Extra glass size around the attached anchor's rect, in px. |
+| `liteMotion` | `boolean \| 'auto'` | `'auto'` | Pause refraction while the glass is moving (a cheap transform-based magnification stands in), restoring it on settle. `'auto'` enables it on non-Blink engines (Safari/Firefox), where re-rasterizing SVG filters every frame can't hold 60 fps. |
 
 ### Parameters
 
@@ -118,7 +119,7 @@ To stay cross-browser it uses **clone mode**: the background element you point i
 
 ### Web component attributes
 
-Every parameter is an attribute (camelCase → kebab-case, e.g. `spec-angle`, `tint-color`), plus `background` (a CSS selector), `attach-to` (a CSS selector), `attach-padding`, `draggable`, `z-index`, `x`, `y`. Attributes are reactive.
+Every parameter is an attribute (camelCase → kebab-case, e.g. `spec-angle`, `tint-color`), plus `background` (a CSS selector), `attach-to` (a CSS selector), `attach-padding`, `lite-motion` (`true` / `false` / `auto`), `draggable`, `z-index`, `x`, `y`. Attributes are reactive (`lite-motion` and `draggable` are create-time).
 
 ---
 
@@ -143,7 +144,7 @@ function App() {
 }
 ```
 
-`background` accepts an element, a CSS selector or a React ref. Extra props: `attachTo` / `attachPadding` (pin the glass to an anchor), `draggable` / `zIndex` (create-time only), `x` / `y` (reactive position), `glassRef` (a ref or callback that receives the core instance) and `onReady`.
+`background` accepts an element, a CSS selector or a React ref. Extra props: `attachTo` / `attachPadding` (pin the glass to an anchor), `draggable` / `zIndex` / `liteMotion` (create-time only), `x` / `y` (reactive position), `glassRef` (a ref or callback that receives the core instance) and `onReady`.
 
 To give an **existing component** a glass surface, use the `useLiquidGlass` hook — it pins a plate to an anchor ref and follows it every frame (CSS transitions included):
 
@@ -189,6 +190,7 @@ g.destroy();
 ## Browser support & caveats
 
 - Needs **SVG filters**, **pointer events**, **`clip-path`** and **custom elements** — all evergreen browsers. `tint > 0` uses `color-mix()` (Chrome 111+, Safari 16.2+, Firefox 113+); `tint: 0` (the default) avoids it.
+- **Motion performance**: browsers re-rasterize the SVG filter chain on every frame the filtered content moves. Blink keeps up at 60 fps; WebKit (Safari) and Gecko don't, which made dragging / attached glasses stutter there. By default (`liteMotion: 'auto'`) non-Blink engines therefore **pause refraction during continuous motion** — a compositor-only transform approximates the magnification — and restore the full filter ~120 ms after the glass rests. Set `liteMotion: false` to always keep the filter on, or `true` to force the behaviour everywhere.
 - **Clone mode** refracts a *clone* of the background, so the background must be clonable DOM/CSS (a known element). It is not a drop-in over arbitrary live app UI — for that you'd want a `backdrop-filter` mode (Chromium-only), which is not included here by design.
 - The clone is a **static snapshot**. If the background animates or changes, call `refresh()`.
 - The clone keeps element **ids** so id-based styles survive; this means ids are briefly duplicated in the DOM (the clone is `aria-hidden`; your own `getElementById`/`querySelector` still return the original).

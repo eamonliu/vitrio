@@ -20,6 +20,11 @@ export declare const LiquidGlass: import("vue").DefineComponent<import("vue").Ex
         type: PropType<AttachPadding>;
         default: undefined;
     };
+    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    liteMotion: {
+        type: PropType<boolean | "auto">;
+        default: string;
+    };
     /** Whether the glass can be dragged. Create-time only. */
     draggable: {
         type: BooleanConstructor;
@@ -110,6 +115,11 @@ export declare const LiquidGlass: import("vue").DefineComponent<import("vue").Ex
     attachPadding: {
         type: PropType<AttachPadding>;
         default: undefined;
+    };
+    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    liteMotion: {
+        type: PropType<boolean | "auto">;
+        default: string;
     };
     /** Whether the glass can be dragged. Create-time only. */
     draggable: {
@@ -210,6 +220,7 @@ export declare const LiquidGlass: import("vue").DefineComponent<import("vue").Ex
     y: number;
     attachTo: BackgroundProp;
     attachPadding: AttachPadding;
+    liteMotion: boolean | "auto";
 }, {}, {}, {}, string, import("vue").ComponentProvideOptions, true, {}, any>;
 export default LiquidGlass;
 export { LiquidGlassCore, DEFAULTS };
