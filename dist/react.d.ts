@@ -33,7 +33,8 @@ export interface LiquidGlassProps extends Partial<LiquidGlassParams> {
     /**
      * Pause refraction while the glass is moving (a cheap transform stands in), restoring
      * it on settle — keeps motion at 60 fps on engines with slow SVG filters.
-     * 'auto' (default) = enabled on non-Blink engines (Safari/Firefox). Create-time only.
+     * 'auto' (default) = enabled on Gecko/Firefox. WebKit ignores it (always renders the
+     * compositor approximation — Safari can't render feImage). Create-time only.
      */
     liteMotion?: boolean | 'auto';
 }
@@ -47,7 +48,7 @@ export interface UseLiquidGlassOptions extends Partial<LiquidGlassParams> {
     zIndex?: number;
     /** Extra glass size around the anchor's rect, in px. */
     padding?: AttachPadding;
-    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    /** Pause refraction while moving ('auto' = Gecko only; WebKit always approximates). Create-time only. */
     liteMotion?: boolean | 'auto';
 }
 /**

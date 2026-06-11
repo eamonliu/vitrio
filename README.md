@@ -8,7 +8,7 @@ Cross-browser **liquid-glass refraction** for the web — real optical displacem
 
 - 🔬 **Real refraction** via SVG `feDisplacementMap` driven by a height-field optical model — convex surfaces magnify, concave shrink.
 - 🌈 Chromatic aberration + specular highlight computed from the surface normal.
-- 🧭 **Works in Chrome, Safari and Firefox.** Most demos out there are Chromium-only (they reference an SVG filter from `backdrop-filter`); this one refracts a clone of the background instead, so it runs everywhere.
+- 🧭 **Cross-browser, tiered.** Full per-pixel refraction in Chrome/Edge (Blink) and Firefox (Gecko). WebKit (Safari and every iOS browser) cannot render `feImage` — the primitive that feeds the displacement map — so vitrio automatically renders a **compositor-only glass approximation** there (edge-matched transform magnification + specular overlay + blur). Same API everywhere, and always smooth.
 - 🪶 ~13 kB min, **zero dependencies**, written in **TypeScript** — ships ESM / CJS / UMD + type declarations generated from source.
 - 🖱️ Draggable, fully runtime-configurable.
 - ⚛️ First-class **React** and **Vue 3** wrappers: `vitrio/react`, `vitrio/vue`.
@@ -65,7 +65,7 @@ Importing the module (or the UMD script) registers the `<liquid-glass>` element 
 
 ## How it works
 
-The glass element does not blur a backdrop — it **bends the actual pixels**. A small displacement map is generated on a canvas from a rounded-rectangle SDF and a thickness profile (`(1 - (1-t)^k)^(1/k)`, a circle→squircle curve). The map's R/G channels encode per-pixel displacement; an SVG filter (`feImage` → `feDisplacementMap`) applies it. Displacement points **inward**, so a convex bezel converges rays and magnifies, exactly like a real lens. Three passes at slightly different scales give chromatic aberration, and a second canvas encodes a specular highlight from the surface normal.
+The glass element does not blur a backdrop — it **bends the actual pixels**. A small displacement map is generated on a canvas from a rounded-rectangle SDF and a thickness profile (`(1 - (1-t)^k)^(1/k)`, a circle→squircle curve). The map's R/G channels encode per-pixel displacement; an SVG filter (`feImage` → `feDisplacementMap`) applies it. Displacement points **inward**, so a convex bezel converges rays and magnifies, exactly like a real lens. Three passes at slightly different scales give chromatic aberration, and a second canvas encodes a specular highlight from the surface normal, applied as a screen-blended overlay.
 
 To stay cross-browser it uses **clone mode**: the background element you point it at is cloned into a small, clipped overlay that the filter is applied to (Safari/Firefox don't support referencing an SVG filter from `backdrop-filter`). The clone is kept pixel-aligned with the real background.
 
@@ -85,7 +85,7 @@ To stay cross-browser it uses **clone mode**: the background element you point i
 | `x`, `y` | `number` | centered | Initial screen position of the glass top-left. |
 | `attachTo` | `Element \| null` | `null` | Anchor element: the glass follows its screen rect every frame (transitions included). Overrides x/y/width/height; disables dragging. |
 | `attachPadding` | `number \| {x, y}` | `0` | Extra glass size around the attached anchor's rect, in px. |
-| `liteMotion` | `boolean \| 'auto'` | `'auto'` | Pause refraction while the glass is moving (a cheap transform-based magnification stands in), restoring it on settle. `'auto'` enables it on non-Blink engines (Safari/Firefox), where re-rasterizing SVG filters every frame can't hold 60 fps. |
+| `liteMotion` | `boolean \| 'auto'` | `'auto'` | Pause refraction while the glass is moving (a cheap transform-based magnification stands in), restoring it on settle. `'auto'` enables it on Gecko (Firefox), where re-rasterizing SVG filters every frame can't hold 60 fps. WebKit ignores it — its rendering is always the compositor approximation. |
 
 ### Parameters
 
@@ -189,8 +189,10 @@ g.destroy();
 
 ## Browser support & caveats
 
-- Needs **SVG filters**, **pointer events**, **`clip-path`** and **custom elements** — all evergreen browsers. `tint > 0` uses `color-mix()` (Chrome 111+, Safari 16.2+, Firefox 113+); `tint: 0` (the default) avoids it.
-- **Motion performance**: browsers re-rasterize the SVG filter chain on every frame the filtered content moves. Blink keeps up at 60 fps; WebKit (Safari) and Gecko don't, which made dragging / attached glasses stutter there. By default (`liteMotion: 'auto'`) non-Blink engines therefore **pause refraction during continuous motion** — a compositor-only transform approximates the magnification — and restore the full filter ~120 ms after the glass rests. Set `liteMotion: false` to always keep the filter on, or `true` to force the behaviour everywhere.
+- Needs **pointer events**, **`clip-path`** and **custom elements** — all evergreen browsers. `tint > 0` uses `color-mix()` (Chrome 111+, Safari 16.2+, Firefox 113+); `tint: 0` (the default) avoids it.
+- **Rendering tiers.** Full refraction requires SVG filters with a working `feImage` — that's Chrome/Edge (Blink) and Firefox (Gecko). **WebKit (Safari, all iOS browsers) does not render `feImage` at all** (verified against Safari 26: static markup, dynamic DOM, `data:`/`blob:`/`http:` sources all yield an empty result), so true per-pixel displacement is impossible there. vitrio detects WebKit and renders an **approximation with zero SVG-filter cost**: the cloned background is magnified by a transform whose edge sampling matches the real refraction, plus the normal-based specular overlay, glow, tint and backdrop blur. `chroma` has no visible effect on WebKit. Because nothing is re-rasterized, glass on Safari tracks anchors at full frame rate.
+- **Motion performance**: filter engines re-rasterize the chain on every frame the filtered content moves. Blink keeps up at 60 fps; Gecko doesn't, so by default (`liteMotion: 'auto'`) Firefox **pauses refraction during continuous motion** — the same compositor transform stands in — and restores the filter ~120 ms after the glass rests. `liteMotion: false` keeps the filter on always; `true` forces the behaviour on Blink too. WebKit ignores the option (its rendering is already compositor-only).
+- **Opening the examples from disk**: Safari's local-file restrictions block a `file://` page from loading sibling scripts, so the example pages appear without any glass when double-clicked. Serve the repo instead: `python3 -m http.server` → `http://localhost:8000/examples/…` (Chrome and Firefox are fine with `file://`).
 - **Clone mode** refracts a *clone* of the background, so the background must be clonable DOM/CSS (a known element). It is not a drop-in over arbitrary live app UI — for that you'd want a `backdrop-filter` mode (Chromium-only), which is not included here by design.
 - The clone is a **static snapshot**. If the background animates or changes, call `refresh()`.
 - The clone keeps element **ids** so id-based styles survive; this means ids are briefly duplicated in the DOM (the clone is `aria-hidden`; your own `getElementById`/`querySelector` still return the original).

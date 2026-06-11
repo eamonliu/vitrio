@@ -87,11 +87,13 @@ export interface LiquidGlassOptions extends Partial<LiquidGlassParams> {
     attachPadding?: AttachPadding;
     /**
      * Lightweight rendering while the glass is in motion. Browsers re-rasterize the SVG
-     * filter chain on every frame the filtered content moves; Blink keeps up at 60 fps but
-     * WebKit (Safari) and Gecko do not. With lite motion, continuous movement (dragging,
-     * attach-follow, scrolling) pauses the refraction filter and approximates the lens with
-     * a cheap compositor-only transform; full refraction is restored once the glass rests.
-     * `'auto'` (default) enables it on non-Blink engines only.
+     * filter chain on every frame the filtered content moves; Blink keeps up at 60 fps,
+     * Gecko does not. With lite motion, continuous movement (dragging, attach-follow,
+     * scrolling) pauses the refraction filter and approximates the lens with a cheap
+     * compositor-only transform; full refraction is restored once the glass rests.
+     * `'auto'` (default) enables it on filter-rendering engines other than Blink (i.e.
+     * Gecko). WebKit ignores this option: it always renders the cheap approximation
+     * (Safari cannot render feImage, the primitive that feeds the displacement map).
      */
     liteMotion?: boolean | 'auto';
 }
@@ -136,8 +138,7 @@ export declare class LiquidGlass {
     private filterDrag;
     private feImage;
     private feImageDrag;
-    private feSpec;
-    private feSpecDrag;
+    private specImg;
     private dispR;
     private dispG;
     private dispB;

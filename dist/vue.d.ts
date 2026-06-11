@@ -20,7 +20,7 @@ export declare const LiquidGlass: import("vue").DefineComponent<import("vue").Ex
         type: PropType<AttachPadding>;
         default: undefined;
     };
-    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    /** Pause refraction while moving ('auto' = Gecko only; WebKit always approximates). Create-time only. */
     liteMotion: {
         type: PropType<boolean | "auto">;
         default: string;
@@ -116,7 +116,7 @@ export declare const LiquidGlass: import("vue").DefineComponent<import("vue").Ex
         type: PropType<AttachPadding>;
         default: undefined;
     };
-    /** Pause refraction while moving ('auto' = non-Blink engines only). Create-time only. */
+    /** Pause refraction while moving ('auto' = Gecko only; WebKit always approximates). Create-time only. */
     liteMotion: {
         type: PropType<boolean | "auto">;
         default: string;

@@ -98,11 +98,13 @@ export interface LiquidGlassOptions extends Partial<LiquidGlassParams> {
   attachPadding?: AttachPadding;
   /**
    * Lightweight rendering while the glass is in motion. Browsers re-rasterize the SVG
-   * filter chain on every frame the filtered content moves; Blink keeps up at 60 fps but
-   * WebKit (Safari) and Gecko do not. With lite motion, continuous movement (dragging,
-   * attach-follow, scrolling) pauses the refraction filter and approximates the lens with
-   * a cheap compositor-only transform; full refraction is restored once the glass rests.
-   * `'auto'` (default) enables it on non-Blink engines only.
+   * filter chain on every frame the filtered content moves; Blink keeps up at 60 fps,
+   * Gecko does not. With lite motion, continuous movement (dragging, attach-follow,
+   * scrolling) pauses the refraction filter and approximates the lens with a cheap
+   * compositor-only transform; full refraction is restored once the glass rests.
+   * `'auto'` (default) enables it on filter-rendering engines other than Blink (i.e.
+   * Gecko). WebKit ignores this option: it always renders the cheap approximation
+   * (Safari cannot render feImage, the primitive that feeds the displacement map).
    */
   liteMotion?: boolean | 'auto';
 }
@@ -130,6 +132,16 @@ const _ns = 'lqg' + Math.random().toString(36).slice(2, 6) + '-';
    a moving filtered element at 60 fps, so liteMotion: 'auto' resolves against this. */
 const BLINK = typeof navigator !== 'undefined' && /Chrome\/\d/.test(navigator.userAgent);
 
+/* WebKit proper (Safari and every iOS browser — they all run WebKit). WebKit does not
+   render the feImage filter primitive at all (verified against Safari 26: static markup,
+   dynamic DOM, data:/blob:/http: sources, CSS filters on HTML and filters on SVG shapes
+   all yield an empty result). feImage is the only way to feed a custom displacement map
+   to feDisplacementMap, so true per-pixel refraction is impossible there. On WebKit the
+   lens therefore uses a compositor-only approximation instead of the SVG filter:
+   a transform-based magnification of the clone + the specular overlay + backdrop blur.
+   It tracks anchors at full frame rate (no filter rasterization at all). */
+const WEBKIT = !BLINK && typeof navigator !== 'undefined' && /AppleWebKit/i.test(navigator.userAgent);
+
 /* How long the glass must rest before full refraction is restored, and how close together
    two moves must be to count as continuous motion (an isolated moveTo stays full-quality). */
 const LITE_SETTLE_MS = 120;
@@ -146,7 +158,7 @@ function injectStyle(): void {
   _styleEl.textContent =
     `.lqg-lens{position:fixed;top:0;left:0;overflow:hidden;pointer-events:none;}` +
     `.lqg-lens-inner{position:absolute;top:0;left:0;}` +
-    `.lqg-glass{position:fixed;top:0;left:0;box-sizing:border-box;pointer-events:none;` +
+    `.lqg-glass{position:fixed;top:0;left:0;box-sizing:border-box;pointer-events:none;overflow:hidden;` +
       `-webkit-backdrop-filter:blur(var(--lqg-blur,0px));backdrop-filter:blur(var(--lqg-blur,0px));` +
       `background:color-mix(in srgb, var(--lqg-tint-color,#fff) calc(var(--lqg-tint,0) * 100%), transparent);` +
       `box-shadow:0 10px 40px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.25),` +
@@ -154,7 +166,8 @@ function injectStyle(): void {
         `0 0 calc(var(--lqg-glow,0) * 60px) rgba(255,255,255, calc(var(--lqg-glow,0) * .55));` +
       `touch-action:none;will-change:transform;}` +
     `.lqg-glass.lqg-draggable{pointer-events:auto;cursor:grab;}` +
-    `.lqg-glass.lqg-draggable:active{cursor:grabbing;}`;
+    `.lqg-glass.lqg-draggable:active{cursor:grabbing;}` +
+    `.lqg-spec{position:absolute;pointer-events:none;mix-blend-mode:screen;user-select:none;}`;
   (document.head || document.documentElement).appendChild(_styleEl);
 }
 
@@ -189,7 +202,7 @@ export class LiquidGlass {
   private _liteOn: boolean;
   private _lite = false;
   private _liteT = 0;
-  private _lastMoveT = 0;
+  private _lastMoveT = -1e9; // far past: the first-ever move must not count as a burst
 
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -201,8 +214,7 @@ export class LiquidGlass {
   private filterDrag!: SVGFilterElement;
   private feImage!: SVGFEImageElement;
   private feImageDrag!: SVGFEImageElement;
-  private feSpec!: SVGFEImageElement;
-  private feSpecDrag!: SVGFEImageElement;
+  private specImg!: HTMLImageElement;
   private dispR!: SVGFEDisplacementMapElement;
   private dispG!: SVGFEDisplacementMapElement;
   private dispB!: SVGFEDisplacementMapElement;
@@ -218,7 +230,8 @@ export class LiquidGlass {
     this.background = opts.background || null;
     this.zIndex = opts.zIndex != null ? opts.zIndex : 100;
     this.draggable = opts.draggable !== false && !opts.attachTo;
-    this._liteOn = opts.liteMotion === true || (opts.liteMotion !== false && !BLINK);
+    // WebKit always renders the cheap approximation, so it has nothing to pause.
+    this._liteOn = !WEBKIT && (opts.liteMotion === true || (opts.liteMotion !== false && !BLINK));
 
     this.params = { ...DEFAULTS };
     for (const k of Object.keys(DEFAULTS) as (keyof LiquidGlassParams)[]) {
@@ -241,56 +254,55 @@ export class LiquidGlass {
     if (opts.attachTo) this.attach(opts.attachTo, opts.attachPadding);
   }
 
-  /* ---------- Build DOM and the per-instance SVG filters (unique ids) ---------- */
+  /* ---------- Build DOM and the per-instance SVG filters (unique ids) ----------
+     Built with createElementNS, not innerHTML: WebKit never renders feImage nodes that
+     were produced by the HTML parser's foreign-content path, and programmatic nodes are
+     what lets _setImg swap in fresh feImages with the href already set (see there). */
   private _build(): void {
     const u = this.uid;
+    const fe = <T extends SVGElement>(name: string, attrs: Record<string, string>): T => {
+      const el = document.createElementNS(SVGNS, name) as T;
+      for (const k of Object.keys(attrs)) el.setAttribute(k, attrs[k]);
+      return el;
+    };
     const cm = (ch: number): string => { // feColorMatrix that keeps a single colour channel
       const m = ['0 0 0 0 0', '0 0 0 0 0', '0 0 0 0 0', '0 0 0 1 0'];
       m[ch] = ch === 0 ? '1 0 0 0 0' : ch === 1 ? '0 1 0 0 0' : '0 0 1 0 0';
       return m.join('  ');
     };
-    const svg = document.createElementNS(SVGNS, 'svg');
-    svg.setAttribute('aria-hidden', 'true');
+    const FILTER = { x: '0', y: '0', width: '100%', height: '100%', 'color-interpolation-filters': 'sRGB' };
+    const IMG = { x: '0', y: '0', preserveAspectRatio: 'none', result: 'map' };
+    const DISP = { in: 'SourceGraphic', in2: 'map', xChannelSelector: 'R', yChannelSelector: 'G' };
+
+    const svg = fe<SVGSVGElement>('svg', { 'aria-hidden': 'true' });
     svg.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden';
-    svg.innerHTML =
-      `<defs>` +
-      `<filter id="${u}-full" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">` +
-        `<feFlood flood-color="rgb(128,128,128)" result="neutral"/>` +
-        `<feImage id="${u}-map" x="0" y="0" preserveAspectRatio="none" result="raw"/>` +
-        `<feComposite in="raw" in2="neutral" operator="over" result="map"/>` +
-        `<feDisplacementMap id="${u}-dr" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="dr"/>` +
-        `<feColorMatrix in="dr" type="matrix" values="${cm(0)}" result="cr"/>` +
-        `<feDisplacementMap id="${u}-dg" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="dg"/>` +
-        `<feColorMatrix in="dg" type="matrix" values="${cm(1)}" result="cg"/>` +
-        `<feDisplacementMap id="${u}-db" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="db"/>` +
-        `<feColorMatrix in="db" type="matrix" values="${cm(2)}" result="cb"/>` +
-        `<feBlend in="cr" in2="cg" mode="screen" result="rg"/>` +
-        `<feBlend in="rg" in2="cb" mode="screen" result="rgb"/>` +
-        `<feImage id="${u}-spec" x="0" y="0" preserveAspectRatio="none" result="spec"/>` +
-        `<feBlend in="spec" in2="rgb" mode="screen"/>` +
-      `</filter>` +
-      `<filter id="${u}-drag" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">` +
-        `<feFlood flood-color="rgb(128,128,128)" result="neutral"/>` +
-        `<feImage id="${u}-map-d" x="0" y="0" preserveAspectRatio="none" result="raw"/>` +
-        `<feComposite in="raw" in2="neutral" operator="over" result="map"/>` +
-        `<feDisplacementMap id="${u}-dd" in="SourceGraphic" in2="map" xChannelSelector="R" yChannelSelector="G" result="rgb"/>` +
-        `<feImage id="${u}-spec-d" x="0" y="0" preserveAspectRatio="none" result="spec"/>` +
-        `<feBlend in="spec" in2="rgb" mode="screen"/>` +
-      `</filter>` +
-      `</defs>`;
+    const defs = fe<SVGDefsElement>('defs', {});
+
+    // The map feImage always covers the whole filter region, so no neutral feFlood
+    // backstop is needed. (WebKit never attaches these filters — see the WEBKIT notes.)
+    this.feImage = fe<SVGFEImageElement>('feImage', IMG);
+    this.filterFull = fe<SVGFilterElement>('filter', { id: u + '-full', ...FILTER });
+    this.dispR = fe<SVGFEDisplacementMapElement>('feDisplacementMap', { ...DISP, result: 'dr' });
+    this.dispG = fe<SVGFEDisplacementMapElement>('feDisplacementMap', { ...DISP, result: 'dg' });
+    this.dispB = fe<SVGFEDisplacementMapElement>('feDisplacementMap', { ...DISP, result: 'db' });
+    this.filterFull.append(
+      this.feImage,
+      this.dispR, fe('feColorMatrix', { in: 'dr', type: 'matrix', values: cm(0), result: 'cr' }),
+      this.dispG, fe('feColorMatrix', { in: 'dg', type: 'matrix', values: cm(1), result: 'cg' }),
+      this.dispB, fe('feColorMatrix', { in: 'db', type: 'matrix', values: cm(2), result: 'cb' }),
+      fe('feBlend', { in: 'cr', in2: 'cg', mode: 'screen', result: 'rg' }),
+      fe('feBlend', { in: 'rg', in2: 'cb', mode: 'screen' }),
+    );
+
+    this.feImageDrag = fe<SVGFEImageElement>('feImage', IMG);
+    this.dispDrag = fe<SVGFEDisplacementMapElement>('feDisplacementMap', DISP);
+    this.filterDrag = fe<SVGFilterElement>('filter', { id: u + '-drag', ...FILTER });
+    this.filterDrag.append(this.feImageDrag, this.dispDrag);
+
+    defs.append(this.filterFull, this.filterDrag);
+    svg.appendChild(defs);
     document.body.appendChild(svg);
     this.svg = svg;
-    const q = <T extends Element>(id: string): T => svg.querySelector('#' + CSS.escape(id)) as T;
-    this.filterFull = q<SVGFilterElement>(u + '-full');
-    this.filterDrag = q<SVGFilterElement>(u + '-drag');
-    this.feImage = q<SVGFEImageElement>(u + '-map');
-    this.feImageDrag = q<SVGFEImageElement>(u + '-map-d');
-    this.feSpec = q<SVGFEImageElement>(u + '-spec');
-    this.feSpecDrag = q<SVGFEImageElement>(u + '-spec-d');
-    this.dispR = q<SVGFEDisplacementMapElement>(u + '-dr');
-    this.dispG = q<SVGFEDisplacementMapElement>(u + '-dg');
-    this.dispB = q<SVGFEDisplacementMapElement>(u + '-db');
-    this.dispDrag = q<SVGFEDisplacementMapElement>(u + '-dd');
 
     this.lensEl = document.createElement('div');
     this.lensEl.className = 'lqg-lens';
@@ -302,6 +314,12 @@ export class LiquidGlass {
     this.glassEl = document.createElement('div');
     this.glassEl.className = 'lqg-glass' + (this.draggable ? ' lqg-draggable' : '');
     this.glassEl.style.zIndex = String(this.zIndex + 1);
+    // Specular highlight: a screen-blended overlay image rather than an in-filter
+    // feImage pass — cheaper, works on WebKit, and stays visible during lite motion.
+    this.specImg = document.createElement('img');
+    this.specImg.className = 'lqg-spec';
+    this.specImg.alt = '';
+    this.glassEl.appendChild(this.specImg);
 
     document.body.appendChild(this.lensEl);
     document.body.appendChild(this.glassEl);
@@ -368,7 +386,9 @@ export class LiquidGlass {
     };
     const dpp = 0.5 / bezel;
 
-    const res = Math.min(1, 360 / Math.max(OW, OH));
+    // Gecko gets a full 1:1 map (safest for its feImage scaling); Blink stretches the
+    // capped map fine, and WebKit only uses the (stretchable) specular overlay image.
+    const res = BLINK || WEBKIT ? Math.min(1, 360 / Math.max(OW, OH)) : 1;
     const mw = Math.max(2, Math.round(OW * res));
     const mh = Math.max(2, Math.round(OH * res));
     const cv = this.canvas; cv.width = mw; cv.height = mh;
@@ -411,14 +431,17 @@ export class LiquidGlass {
       }
     }
 
-    for (let i = 0; i < N; i++) {
-      data[i * 4]     = clamp(rx[i] / maxAbs * 0.5 + 0.5, 0, 1) * 255;
-      data[i * 4 + 1] = clamp(ry[i] / maxAbs * 0.5 + 0.5, 0, 1) * 255;
-      data[i * 4 + 2] = 128;
-      data[i * 4 + 3] = 255;
+    let url = '';
+    if (!WEBKIT) { // WebKit never consumes the displacement map (no feImage support)
+      for (let i = 0; i < N; i++) {
+        data[i * 4]     = clamp(rx[i] / maxAbs * 0.5 + 0.5, 0, 1) * 255;
+        data[i * 4 + 1] = clamp(ry[i] / maxAbs * 0.5 + 0.5, 0, 1) * 255;
+        data[i * 4 + 2] = 128;
+        data[i * 4 + 3] = 255;
+      }
+      this.ctx.putImageData(img, 0, 0);
+      url = cv.toDataURL();
     }
-    this.ctx.putImageData(img, 0, 0);
-    const url = cv.toDataURL();
 
     // Specular image: white, alpha = strength * edge.
     this.specCanvas.width = mw; this.specCanvas.height = mh;
@@ -434,21 +457,36 @@ export class LiquidGlass {
     this.lensEl.style.width = OW + 'px';
     this.lensEl.style.height = OH + 'px';
     this.lensEl.style.clipPath = `inset(${M}px round ${rr}px)`; // show only the lens shape
-    this._setImg([this.feImage, this.feImageDrag], OW, OH, url);
-    this._setImg([this.feSpec, this.feSpecDrag], OW, OH, specUrl);
+    this.specImg.src = specUrl;
+    const si = this.specImg.style;
+    si.left = -M + 'px'; si.top = -M + 'px';
+    si.width = OW + 'px'; si.height = OH + 'px';
 
     this.placeLens();
     this.updateScales();
-    this.commit();
+    if (!WEBKIT) {
+      this.feImage = this._setImg(this.feImage, OW, OH, url);
+      this.feImageDrag = this._setImg(this.feImageDrag, OW, OH, url);
+      this.commit();
+    }
   }
 
-  private _setImg(list: SVGFEImageElement[], w: number, h: number, href: string): void {
-    for (const fe of list) {
-      fe.setAttribute('width', String(w));
-      fe.setAttribute('height', String(h));
-      fe.setAttribute('href', href);
-      fe.setAttributeNS(XLINK, 'href', href);
-    }
+  /* WebKit only loads an feImage whose href is already set when the node enters the
+     document — mutating href on a live feImage never triggers a load, leaving the filter
+     output empty (glass invisible in Safari). So each map update swaps in a freshly
+     created node with the data URI baked in. Blink/Gecko are fine either way. */
+  private _setImg(old: SVGFEImageElement, w: number, h: number, href: string): SVGFEImageElement {
+    const fe = document.createElementNS(SVGNS, 'feImage') as SVGFEImageElement;
+    fe.setAttribute('x', '0');
+    fe.setAttribute('y', '0');
+    fe.setAttribute('width', String(w));
+    fe.setAttribute('height', String(h));
+    fe.setAttribute('preserveAspectRatio', 'none');
+    fe.setAttribute('result', old.getAttribute('result')!);
+    fe.setAttribute('href', href);
+    fe.setAttributeNS(XLINK, 'href', href);
+    old.parentNode!.replaceChild(fe, old);
+    return fe;
   }
 
   private updateScales(): void {
@@ -459,9 +497,11 @@ export class LiquidGlass {
     this.dispDrag.setAttribute('scale', base.toFixed(2));
   }
 
-  /* Safari caches filter output by id; bump the id after a map update to force a refresh.
-     While lite motion is engaged the filter stays off — it is re-committed on settle. */
+  /* (Re)attach the filter under a fresh id (some engines cache filter output by id).
+     While lite motion is engaged the filter stays off — it is re-committed on settle.
+     WebKit never gets a filter: its lens runs the transform approximation instead. */
   private commit(): void {
+    if (WEBKIT) return;
     this._seq++;
     const el = this._dragMode ? this.filterDrag : this.filterFull;
     const id = (this._dragMode ? this.uid + '-drag-' : this.uid + '-full-') + this._seq;
@@ -486,7 +526,7 @@ export class LiquidGlass {
     g.height = p.height + 'px';
     g.borderRadius = Math.min(p.radius, p.width / 2, p.height / 2) + 'px';
     g.transform = `translate(${Math.round(this.lensX)}px, ${Math.round(this.lensY)}px)`;
-    if (this._lite) this._liteTransform();
+    if (this._lite || WEBKIT) this._liteTransform();
   }
 
   /* ---------- Lite motion: pause refraction while the glass is moving ----------
@@ -518,7 +558,8 @@ export class LiquidGlass {
 
   /* Uniform scale chosen so the content sampled at the lens edge matches what the real
      refraction shows there (edge displacement = scale px inward), which makes the
-     filter <-> transform switch hard to notice. Sign follows convexity. */
+     filter <-> transform switch hard to notice. Sign follows convexity.
+     On WebKit this transform IS the lens (feImage-less approximation), permanently. */
   private _liteTransform(): void {
     const p = this.params;
     const s = Math.min(p.scale, Math.min(p.width, p.height) * 0.45);
