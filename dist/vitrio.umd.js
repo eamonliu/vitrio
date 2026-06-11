@@ -386,12 +386,13 @@
     _liteTransform() {
       const p = this.params;
       const s = Math.min(p.scale, Math.min(p.width, p.height) * 0.45);
-      const c = clamp(p.convexity, -1, 1);
+      const c = clamp(p.convexity, -1, 1) * (WEBKIT ? 0.55 : 1);
       const kx = 1 + (p.width / Math.max(1, p.width - 2 * s) - 1) * c;
       const ky = 1 + (p.height / Math.max(1, p.height - 2 * s) - 1) * c;
       const st = this.lensInner.style;
       st.transformOrigin = `${this.lensX + p.width / 2 - this.bgX}px ${this.lensY + p.height / 2 - this.bgY}px`;
-      st.transform = `scale(${clamp(kx, 0.6, 1.6).toFixed(4)}, ${clamp(ky, 0.6, 1.6).toFixed(4)})`;
+      const kMin = WEBKIT ? 0.7 : 0.6, kMax = WEBKIT ? 1.35 : 1.6;
+      st.transform = `scale(${clamp(kx, kMin, kMax).toFixed(4)}, ${clamp(ky, kMin, kMax).toFixed(4)})`;
     }
     _applyVars() {
       const g = this.glassEl.style, p = this.params;
