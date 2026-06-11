@@ -127,7 +127,7 @@ function injectStyle(): void {
   _styleEl.textContent =
     `.lqg-lens{position:fixed;top:0;left:0;overflow:hidden;pointer-events:none;}` +
     `.lqg-lens-inner{position:absolute;top:0;left:0;}` +
-    `.lqg-glass{position:fixed;top:0;left:0;box-sizing:border-box;` +
+    `.lqg-glass{position:fixed;top:0;left:0;box-sizing:border-box;pointer-events:none;` +
       `-webkit-backdrop-filter:blur(var(--lqg-blur,0px));backdrop-filter:blur(var(--lqg-blur,0px));` +
       `background:color-mix(in srgb, var(--lqg-tint-color,#fff) calc(var(--lqg-tint,0) * 100%), transparent);` +
       `box-shadow:0 10px 40px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.25),` +
